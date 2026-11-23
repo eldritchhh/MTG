@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import type { Deck, Player } from '../lib/types'
-import { PLAYER_COLORS } from '../lib/util'
+import { PLAYER_COLORS, deckLabel } from '../lib/util'
 import { getCommanderList, searchCommanders, type Commander } from '../lib/scryfall'
 import type { Tier } from '../lib/types'
-import { Avatar, DeckArt, DeckCard, Empty, Header, MANA, Modal, Pips, manaGradient } from '../components'
+import { Avatar, DeckArt, DeckCard, Empty, Header, MANA, Modal, Pips, Segmented, SplitArt, deckArts, manaGradient } from '../components'
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
+import { useBack } from '../lib/back'
 
 export default function ProfilesPage() {
   const { players, decks, games } = useStore()
@@ -95,11 +96,38 @@ export default function ProfilesPage() {
   )
 }
 
+type SortKey = 'name' | 'color' | 'tier'
+const WUBRG = 'WUBRG'.split('')
+// mono prima, poi bicolori…; a parità di numero di colori in ordine WUBRG
+const colorKey = (d: Deck) => `${d.colors.length}${d.colors.map((c) => WUBRG.indexOf(c)).join('')}`
+
 function PlayerDetail({ player, onBack, allTags }: { player: Player; onBack: () => void; allTags: string[] }) {
-  const { decks, games } = useStore()
+  const { decks, games, tiers } = useStore()
   const [editDeck, setEditDeck] = useState<Deck | 'new' | null>(null)
   const [editPlayer, setEditPlayer] = useState(false)
+  const [sort, setSort] = useState<SortKey>('name')
+  const [tierF, setTierF] = useState<string | 'none' | null>(null)
+  const [colorsF, setColorsF] = useState<string[]>([])
+  const [exact, setExact] = useState(false)
+  useBack(onBack)
   const mine = decks.filter((d) => d.player_id === player.id)
+  const sortedTiers = [...tiers].sort((a, b) => a.sort_order - b.sort_order)
+  const tierPos = (id: string | null) => sortedTiers.findIndex((t) => t.id === id) >>> 0 // nessun tier = in fondo
+
+  const byColor = (d: Deck) => (exact ? d.colors.length === colorsF.length : true) && colorsF.every((c) => d.colors.includes(c))
+  const byTier = (d: Deck) => tierF === null || (tierF === 'none' ? !d.tier_id : d.tier_id === tierF)
+  const shown = mine
+    .filter((d) => byTier(d) && byColor(d))
+    .sort((a, b) => {
+      const name = deckLabel(a).localeCompare(deckLabel(b))
+      if (sort === 'color') return colorKey(a).localeCompare(colorKey(b)) || name
+      if (sort === 'tier') return tierPos(a.tier_id) - tierPos(b.tier_id) || name
+      return name
+    })
+  // conteggi sui filtri: quanti mazzi per tier (con i colori scelti) e per colore (con il tier scelto)
+  const nTier = (id: string | 'none') => mine.filter((d) => byColor(d) && (id === 'none' ? !d.tier_id : d.tier_id === id)).length
+  const nColor = (c: string) => mine.filter((d) => byTier(d) && d.colors.includes(c)).length
+  const filtering = tierF !== null || colorsF.length > 0
 
   return (
     <div className="stack">
@@ -126,8 +154,79 @@ function PlayerDetail({ player, onBack, allTags }: { player: Player; onBack: () 
         </button>
       </div>
       {mine.length === 0 && <Empty>Nessun comandante ancora.</Empty>}
+      {mine.length > 1 && (
+        <div className="card stack-sm deck-filters">
+          <div className="row between">
+            <span className="muted small">Ordina</span>
+            <Segmented
+              value={sort}
+              onChange={setSort}
+              options={[
+                { id: 'name', label: 'Nome' },
+                { id: 'color', label: 'Colore' },
+                { id: 'tier', label: 'Tier' },
+              ]}
+            />
+          </div>
+          {sortedTiers.length > 0 && (
+            <div className="chips">
+              {sortedTiers.map((t) => (
+                <button key={t.id} className={`tier-chip ${tierF === t.id ? 'on' : ''}`} style={{ ['--tc' as string]: t.color }} onClick={() => setTierF(tierF === t.id ? null : t.id)}>
+                  {t.name} <span className="count">{nTier(t.id)}</span>
+                </button>
+              ))}
+              {nTier('none') > 0 && (
+                <button className={`tier-chip none ${tierF === 'none' ? 'on' : ''}`} onClick={() => setTierF(tierF === 'none' ? null : 'none')}>
+                  Senza tier <span className="count">{nTier('none')}</span>
+                </button>
+              )}
+            </div>
+          )}
+          <div className="row wrap">
+            {WUBRG.map((c) => (
+              <button
+                key={c}
+                className={`mana-btn sm ${colorsF.includes(c) ? 'on' : ''}`}
+                style={{ background: MANA[c] }}
+                aria-label={`Filtra colore ${c}`}
+                onClick={() => setColorsF(colorsF.includes(c) ? colorsF.filter((x) => x !== c) : WUBRG.filter((x) => x === c || colorsF.includes(x)))}
+              >
+                {c}
+                <span className="mana-count">{nColor(c)}</span>
+              </button>
+            ))}
+            {colorsF.length > 0 && (
+              <Segmented
+                value={exact ? 'exact' : 'has'}
+                onChange={(v) => setExact(v === 'exact')}
+                options={[
+                  { id: 'has', label: 'Contiene' },
+                  { id: 'exact', label: 'Esatti' },
+                ]}
+              />
+            )}
+          </div>
+          {filtering && (
+            <div className="row between small">
+              <span className="muted">
+                {shown.length} di {mine.length} comandanti
+              </span>
+              <button
+                className="link small"
+                onClick={() => {
+                  setTierF(null)
+                  setColorsF([])
+                }}
+              >
+                Togli filtri
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {filtering && shown.length === 0 && <p className="muted small">Nessun comandante con questi filtri.</p>}
       <div className="deck-grid">
-        {mine.map((d) => (
+        {shown.map((d) => (
           <DeckCard key={d.id} d={d} onClick={() => setEditDeck(d)} />
         ))}
       </div>
@@ -190,6 +289,10 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
   const [tags, setTags] = useState<string[]>(deck?.tags ?? [])
   const [tagInput, setTagInput] = useState('')
   const [image, setImage] = useState<string | null>(deck?.image_url ?? null)
+  // mazzi creati prima dell'immagine del partner: la recupero dalla lista comandanti, se scaricata
+  const [partnerImage, setPartnerImage] = useState<string | null>(
+    deck?.partner_image_url ?? (deck?.partner ? (getCommanderList()?.cards.find((c) => c.name === deck.partner)?.art ?? null) : null),
+  )
   const [notes, setNotes] = useState(deck?.notes ?? '')
   const [active, setActive] = useState(deck?.active ?? true)
   const [sugg, setSugg] = useState<Commander[]>([])
@@ -221,8 +324,10 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
     const which = focus
     setSugg([])
     setFocus(null)
-    if (which === 'p') setPartner(c.name)
-    else {
+    if (which === 'p') {
+      setPartner(c.name)
+      setPartnerImage(c.art)
+    } else {
       setCommander(c.name)
       setImage(c.art) // di default l'illustrazione del comandante
     }
@@ -247,6 +352,7 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
       colors,
       tags: tagInput.trim() ? [...new Set([...tags, tagInput.trim().toLowerCase()])] : tags,
       image_url: image,
+      partner_image_url: partner.trim() ? partnerImage : null,
       notes: notes.trim() || null,
       tier_id: tierId,
       active,
@@ -256,6 +362,7 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
     onClose()
   }
 
+  const previewArts = deckArts({ image_url: image, partner_image_url: partner.trim() ? partnerImage : null })
   const tagSugg = allTags.filter((t) => !tags.includes(t) && t.includes(tagInput.toLowerCase())).slice(0, 8)
 
   return (
@@ -276,11 +383,18 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
         <label className="field">
           <span>Partner / Background (opzionale)</span>
           <div className="ac">
-            <input value={partner} onChange={(e) => setPartner(e.target.value)} onFocus={() => setFocus('p')} />
+            <input
+              value={partner}
+              onChange={(e) => {
+                setPartner(e.target.value)
+                if (!e.target.value.trim()) setPartnerImage(null)
+              }}
+              onFocus={() => setFocus('p')}
+            />
             {focus === 'p' && <Suggestions items={sugg} onPick={pick} searching={searching} query={partner} />}
           </div>
         </label>
-        {image && <div className="art preview" style={{ backgroundImage: `url(${image})` }} />}
+        {previewArts.length > 0 && <SplitArt urls={previewArts} className="art preview" />}
         <div className="field">
           <span>Identità di colore</span>
           <div className="chips">

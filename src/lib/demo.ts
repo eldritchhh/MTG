@@ -29,7 +29,7 @@ export function demoData(): { [T in TableName]: Tables[T][] } {
   const tiers = defaultTiers([uid(901), uid(902), uid(903)])
   const T = { S: uid(901), '1': uid(902), '2': uid(903) } as const
   const dk = (n: number, owner: string, commander: string, colors: string[], tags: string[], tier: keyof typeof T, partner: string | null = null): Deck => ({
-    id: uid(100 + n), player_id: P[owner], commander, partner, colors, tags, image_url: null, notes: null, tier_id: T[tier], active: true, created_at: iso(50),
+    id: uid(100 + n), player_id: P[owner], commander, partner, colors, tags, image_url: null, partner_image_url: null, notes: null, tier_id: T[tier], active: true, created_at: iso(50),
   })
   const decks = [
     dk(1, 'Francesco', "Atraxa, Praetors' Voice", ['W', 'U', 'B', 'G'], ['superfriends', 'control'], 'S'),

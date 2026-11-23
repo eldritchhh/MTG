@@ -3,6 +3,7 @@ import type { Deck, Player } from './lib/types'
 import { deckLabel } from './lib/util'
 import { useStore } from './lib/store'
 import { Icon } from './icons'
+import { useBack } from './lib/back'
 
 export const MANA: Record<string, string> = { W: '#f6eed3', U: '#3f8fd8', B: '#4a3f52', R: '#e2553f', G: '#2f9e5b', C: '#b9b3a6' }
 const MANA_INK: Record<string, string> = { W: '#5a4a1c', U: '#e8f2ff', B: '#e6dcef', R: '#fff1ec', G: '#eafff1', C: '#3a3630' }
@@ -38,8 +39,23 @@ export function Avatar({ p, size = 28 }: { p?: Player; size?: number }) {
   )
 }
 
+// illustrazioni del mazzo: una, o due (comandante + partner/background) affiancate a metà
+export const deckArts = (d?: Pick<Deck, 'image_url' | 'partner_image_url'>) =>
+  [d?.image_url, d?.partner_image_url].filter((u): u is string => !!u)
+
+export function SplitArt({ urls, className }: { urls: string[]; className: string }) {
+  return (
+    <div className={`${className} split`}>
+      {urls.map((u, i) => (
+        <i key={i} style={{ backgroundImage: `url(${u})` }} />
+      ))}
+    </div>
+  )
+}
+
 export function DeckArt({ d, className = '' }: { d?: Deck; className?: string }) {
-  if (d?.image_url) return <div className={`art ${className}`} style={{ backgroundImage: `url(${d.image_url})` }} />
+  const urls = deckArts(d)
+  if (urls.length) return <SplitArt urls={urls} className={`art ${className}`} />
   return (
     <div className={`art fallback ${className}`} style={{ backgroundImage: manaGradient(d?.colors ?? [], 0.85) }}>
       <span className="art-initial">{d?.commander.slice(0, 1) ?? '?'}</span>
@@ -69,6 +85,7 @@ export function Header({ title, sub, action }: { title: string; sub?: ReactNode;
 }
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useBack(onClose)
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>

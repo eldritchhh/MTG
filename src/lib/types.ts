@@ -10,6 +10,7 @@ export type Deck = {
   colors: string[]
   tags: string[]
   image_url: string | null
+  partner_image_url: string | null // illustrazione del partner/background: la card mostra metà e metà
   notes: string | null
   tier_id: string | null
   active: boolean

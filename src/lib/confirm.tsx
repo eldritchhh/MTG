@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useBack } from './back'
 
 // Conferma dentro la pagina (window.confirm non funziona ovunque, es. negli artifact)
 type Req = { msg: string; resolve: (ok: boolean) => void }
@@ -16,11 +17,12 @@ export function ConfirmHost() {
       push = null
     }
   }, [])
-  if (!req) return null
   const done = (ok: boolean) => {
-    req.resolve(ok)
+    req?.resolve(ok)
     setReq(null)
   }
+  useBack(req && (() => done(false)))
+  if (!req) return null
   return (
     <div className="modal-bg confirm-bg" onClick={() => done(false)}>
       <div className="modal confirm" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">

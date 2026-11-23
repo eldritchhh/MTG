@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../lib/store'
 import type { Deck, Participant, Player } from '../lib/types'
 import { byId, deckLabel } from '../lib/util'
-import { Avatar, DeckArt, DeckCard, DeckChip, Header, Modal, Pips, TierBadge, manaGradient } from '../components'
+import { Avatar, DeckArt, DeckCard, DeckChip, Header, Modal, Pips, SplitArt, TierBadge, deckArts, manaGradient } from '../components'
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
+import { useBack } from '../lib/back'
 
 type Seat = {
   player_id: string
@@ -202,7 +203,19 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
   const [panel, setPanel] = useState<number | null>(null)
   const [menu, setMenu] = useState(false)
   const [ending, setEnding] = useState(false)
+  const [moving, setMoving] = useState<number | null>(null) // posto tenuto premuto, da spostare
   const elapsed = useElapsed(live.startedAt)
+  useBack(moving !== null && (() => setMoving(null)))
+
+  // scambia due posti; i danni da comandante sono indicizzati per posto, quindi vanno rimappati
+  function swap(a: number, b: number) {
+    setMoving(null)
+    if (a === b) return
+    const map = (j: number) => (j === a ? b : j === b ? a : j)
+    const seats = live.seats.map((s) => ({ ...s, cmd: Object.fromEntries(Object.entries(s.cmd).map(([k, v]) => [map(Number(k)), v])) }))
+    ;[seats[a], seats[b]] = [seats[b], seats[a]]
+    setLive({ ...live, seats })
+  }
 
   function change(i: number, fn: (s: Seat) => Seat) {
     const seats = live.seats.map((s, j) => (j === i ? fn({ ...s, cmd: { ...s.cmd } }) : { ...s }))
@@ -223,12 +236,17 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
   const tile = (i: number, flipped: boolean) => (
     <SeatTile
       key={i}
+      idx={i}
       seat={live.seats[i]}
       player={P[live.seats[i].player_id]}
       deck={D[live.seats[i].deck_id ?? '']}
       flipped={flipped}
+      moving={moving}
       onLife={(d) => change(i, (s) => ({ ...s, life: s.life + d }))}
       onOpen={() => setPanel(i)}
+      onHold={() => setMoving(i)}
+      onDrop={(target) => target !== null && target !== i && swap(i, target)}
+      onTapWhileMoving={() => moving !== null && swap(moving, i)}
     />
   )
 
@@ -238,10 +256,16 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
         <span className="timer">
           <Icon name="clock" size={16} /> {elapsed}
         </span>
-        <span className="board-title">Partita</span>
-        <button className="icon-btn" onClick={() => setMenu(true)} aria-label="Menu">
-          <Icon name="menu" size={20} />
-        </button>
+        <span className="board-title">{moving !== null ? `Sposta ${P[live.seats[moving].player_id]?.name ?? ''}: tocca il nuovo posto` : 'Partita'}</span>
+        {moving !== null ? (
+          <button className="icon-btn" onClick={() => setMoving(null)} aria-label="Annulla spostamento">
+            <Icon name="x" size={20} />
+          </button>
+        ) : (
+          <button className="icon-btn" onClick={() => setMenu(true)} aria-label="Menu">
+            <Icon name="menu" size={20} />
+          </button>
+        )}
       </div>
       {rows ? (
         <div className="seats table">
@@ -283,6 +307,7 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
             >
               {live.table ? 'Vista a griglia' : 'Vista tavolo (metà capovolta)'}
             </button>
+            <p className="muted small no-m">Per cambiare posto: tieni premuto un giocatore e trascinalo sul nuovo posto (o rilascia e tocca il posto).</p>
             <button
               onClick={async () => {
                 if (!(await ask('Riportare tutti ai punti vita iniziali?'))) return
@@ -309,11 +334,69 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
   )
 }
 
-function SeatTile({ seat, player, deck, flipped, onLife, onOpen }: { seat: Seat; player?: Player; deck?: Deck; flipped: boolean; onLife: (d: number) => void; onOpen: () => void }) {
+const HOLD_MS = 450
+
+function SeatTile({
+  idx, seat, player, deck, flipped, moving, onLife, onOpen, onHold, onDrop, onTapWhileMoving,
+}: {
+  idx: number
+  seat: Seat
+  player?: Player
+  deck?: Deck
+  flipped: boolean
+  moving: number | null
+  onLife: (d: number) => void
+  onOpen: () => void
+  onHold: () => void
+  onDrop: (target: number | null) => void
+  onTapWhileMoving: () => void
+}) {
   const [delta, setDelta] = useState(0)
   const timer = useRef<number | undefined>(undefined)
+  const press = useRef<{ x: number; y: number; t: number } | null>(null)
+  const held = useRef(false)
   const dead = isDead(seat)
   const cmdTotal = Object.values(seat.cmd).reduce((a, b) => a + b, 0)
+  const arts = deckArts(deck)
+
+  // tieni premuto → posto "in mano": trascina e rilascia su un altro posto, oppure rilascia e tocca il posto
+  const cancelHold = () => {
+    if (press.current) clearTimeout(press.current.t)
+    press.current = null
+  }
+  const hold = {
+    onPointerDown: (e: React.PointerEvent) => {
+      held.current = false
+      cancelHold()
+      const t = window.setTimeout(() => {
+        held.current = true
+        navigator.vibrate?.(30)
+        onHold()
+      }, HOLD_MS)
+      press.current = { x: e.clientX, y: e.clientY, t }
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (press.current && !held.current && Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 12) cancelHold()
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      cancelHold()
+      if (!held.current) return
+      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-seat]')
+      onDrop(el ? Number(el.dataset.seat) : null)
+    },
+    onPointerCancel: cancelHold,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+    // durante lo spostamento i tocchi non cambiano la vita: scelgono il posto
+    onClickCapture: (e: React.MouseEvent) => {
+      if (held.current) {
+        held.current = false
+        e.stopPropagation()
+      } else if (moving !== null) {
+        e.stopPropagation()
+        onTapWhileMoving()
+      }
+    },
+  }
 
   function bump(d: number) {
     onLife(d)
@@ -324,14 +407,17 @@ function SeatTile({ seat, player, deck, flipped, onLife, onOpen }: { seat: Seat;
 
   return (
     <div
-      className={`seat ${dead ? 'dead' : ''} ${flipped ? 'flipped' : ''}`}
+      data-seat={idx}
+      className={`seat ${dead ? 'dead' : ''} ${flipped ? 'flipped' : ''} ${moving === idx ? 'moving' : moving !== null ? 'drop-target' : ''}`}
       style={{
         ['--pc' as string]: player?.color ?? '#555',
-        backgroundImage: deck?.image_url
-          ? `linear-gradient(rgba(10,8,16,.6), rgba(10,8,16,.85)), url(${deck.image_url})`
+        backgroundImage: arts.length
+          ? undefined
           : `radial-gradient(90% 70% at 50% 0%, ${player?.color ?? '#555'}40, transparent 70%), ${manaGradient(deck?.colors ?? [], 0.22)}`,
       }}
+      {...hold}
     >
+      {arts.length > 0 && <SplitArt urls={arts} className="seat-art" />}
       <button className="zone minus" onClick={() => bump(-1)} aria-label="-1">
         −
       </button>

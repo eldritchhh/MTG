@@ -71,6 +71,7 @@ create table if not exists games (
 alter table decks add column if not exists tier_id uuid references tiers(id) on delete set null;
 alter table debts add column if not exists group_id uuid;
 alter table debts add column if not exists group_total numeric(10,2);
+alter table decks add column if not exists partner_image_url text;
 
 insert into tiers (name, color, sort_order)
 select * from (values ('S', '#e05252', 0), ('1', '#c9a227', 1), ('2', '#4f8cf0', 2)) v(name, color, sort_order)

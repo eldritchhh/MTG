@@ -10,6 +10,7 @@ import StatsPage from './pages/Stats'
 import SettingsPage from './pages/Settings'
 import { Icon } from './icons'
 import { ConfirmHost } from './lib/confirm'
+import { useBack } from './lib/back'
 
 const TABS = [
   { id: 'game', label: 'Partita', icon: 'heart' },
@@ -49,6 +50,8 @@ function Shell() {
     return TABS.some((t) => t.id === h) ? (h as Tab) : 'game'
   })
   const { error, loading, isDemo } = useStore()
+  // indietro da un'altra scheda torna a Partita (da Partita l'app va in background)
+  useBack(tab !== 'game' && (() => setTab('game')))
 
   useEffect(() => {
     history.replaceState(null, '', `#${tab}`)

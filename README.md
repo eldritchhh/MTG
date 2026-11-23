@@ -2,11 +2,11 @@
 
 Web app (installabile sul telefono) per il gruppo di Magic:
 
-- **Partita** – contatore vita per 2–6 giocatori con mazzo scelto, danni da comandante, veleno, timer, vista "tavolo" con metà schermo capovolta. A fine partita scegli il vincitore e viene salvata nelle statistiche.
+- **Partita** – contatore vita per 2–6 giocatori con mazzo scelto, danni da comandante, veleno, timer, vista "tavolo" con metà schermo capovolta. Tieni premuto un giocatore e trascinalo per cambiargli posto. A fine partita scegli il vincitore e viene salvata nelle statistiche.
 - **Scambi**
   - *Soldi*: stile Tricount. Debiti tra due persone ("Luca deve 4 € a Francesco per Sol Ring") o **spese divise tra più persone** ("Francesco ha pagato 14 € di spedizione dell'ordine CT0" diviso tra 4, quote uguali o personalizzate). Saldi netti e pareggi minimi ("Marco → Francesco 2,50 €").
-  - *Carte*: chi ha dato quali carte a chi, con stato **In prestito / Definitivo / Restituito**.
-- **Profili** – giocatori e i loro comandanti. La ricerca propone **solo comandanti** (anche partner/background) e imposta di default l'illustrazione della carta e l'identità di colore. Tag, ricerca per tag e **tier**.
+  - *Carte*: chi ha dato quali carte a chi, con stato **In prestito / Definitivo / Restituito**. Le carte si aggiungono cercandole per nome (italiano o inglese, da Scryfall) oppure incollando una lista; ogni carta ha il link alla sua pagina Scryfall.
+- **Profili** – giocatori e i loro comandanti. La ricerca propone **solo comandanti** (anche partner/background) e imposta di default l'illustrazione della carta e l'identità di colore. Tag, ricerca per tag e **tier**. Con partner/background l'immagine è metà e metà. I comandanti di un giocatore si ordinano per nome, colore o tier e si filtrano per tier e colori (contiene / esatti), con i conteggi.
 - **Tier dinamici** (es. S, 1, 2) – si aggiungono, rinominano e riordinano da *Altro → Tier*. Ogni partita salva il tier che il mazzo aveva quel giorno: il filtro per tier delle statistiche usa quello, così i numeri non cambiano quando spostate un mazzo di tier.
 - **Statistiche** – vittorie e % (vinte su giocate) per mazzo, giocatore, tag e colore; storico partite; filtri per periodo (30/90 giorni) e per **tier**.
 - **Lista comandanti** – da *Altro → Lista comandanti* la scarichi da Scryfall e la aggiorni quando vuoi (es. dopo un nuovo set): la ricerca diventa istantanea e funziona offline. Senza lista, la ricerca avviene online.

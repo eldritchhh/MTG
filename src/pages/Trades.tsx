@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMe, useStore } from '../lib/store'
+import { formatCardLine, parseCardLine, scryfallUrl, searchCards, type CardHit } from '../lib/scryfall'
 import type { Debt, Loan, LoanStatus, Player } from '../lib/types'
 import { byId, dateIt, eur, netBalances, playerName, settlements } from '../lib/util'
 import { Avatar, Empty, Header, Modal, PlayerSelect, Segmented } from '../components'
@@ -388,6 +389,7 @@ function Cards() {
   const [me] = useMe()
   const [form, setForm] = useState<Loan | 'new' | null>(null)
   const [filter, setFilter] = useState<'open' | 'mine' | 'all'>('open')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const P = byId(players)
 
   const list = loans
@@ -417,22 +419,121 @@ function Cards() {
       {list.length === 0 && <Empty>Nessuna carta {filter === 'open' ? 'in prestito' : ''}.</Empty>}
       <div className="list">
         {list.map((l) => {
-          const cards = l.cards.split('\n').filter(Boolean)
+          const cards = cardLines(l.cards)
+          const open = expanded.has(l.id)
           return (
-            <button key={l.id} className="list-item" onClick={() => setForm(l)}>
-              <div className="grow">
-                <div>
-                  <b>{playerName(P, l.lender_id)}</b> → <b>{playerName(P, l.borrower_id)}</b>
+            <div key={l.id} className="list-item loan-item">
+              <button className="loan-head" onClick={() => setForm(l)}>
+                <div className="grow">
+                  <div>
+                    <b>{playerName(P, l.lender_id)}</b> → <b>{playerName(P, l.borrower_id)}</b>
+                  </div>
+                  <div className="muted small">
+                    {cards.length} cart{cards.length === 1 ? 'a' : 'e'} · {dateIt(l.created_at)}
+                    {l.notes ? ` · ${l.notes}` : ''}
+                  </div>
                 </div>
-                <div className="small">{cards.slice(0, 4).join(', ')}{cards.length > 4 ? ` +${cards.length - 4}` : ''}</div>
-                <div className="muted small">{dateIt(l.created_at)}{l.notes ? ` · ${l.notes}` : ''}</div>
+                <span className={`status ${STATUS[l.status].cls}`}>{STATUS[l.status].label}</span>
+              </button>
+              {/* link a Scryfall per riconoscere al volo la carta (niente immagini: pesano troppo) */}
+              <div className="card-links">
+                {(open ? cards : cards.slice(0, 8)).map((c, i) => (
+                  <CardLink key={i} line={c} />
+                ))}
+                {cards.length > 8 && (
+                  <button className="link small" onClick={() => setExpanded((s) => toggleSet(s, l.id))}>
+                    {open ? 'meno' : `+${cards.length - 8} altre`}
+                  </button>
+                )}
               </div>
-              <span className={`status ${STATUS[l.status].cls}`}>{STATUS[l.status].label}</span>
-            </button>
+            </div>
           )
         })}
       </div>
       {form && <LoanForm loan={form === 'new' ? null : form} onClose={() => setForm(null)} />}
+    </div>
+  )
+}
+
+const cardLines = (cards: string) => cards.split('\n').map((l) => l.trim()).filter(Boolean)
+const toggleSet = (s: Set<string>, id: string) => {
+  const n = new Set(s)
+  if (n.has(id)) n.delete(id)
+  else n.add(id)
+  return n
+}
+
+function CardLink({ line }: { line: string }) {
+  const { qty, name } = parseCardLine(line)
+  return (
+    <a className="card-link" href={scryfallUrl(name)} target="_blank" rel="noreferrer">
+      {qty > 1 && <b>{qty}× </b>}
+      {name}
+      <Icon name="external" size={12} />
+    </a>
+  )
+}
+
+// ricerca con autocompletamento: nomi inglesi (offline se la lista è scaricata) e italiani (online)
+function CardSearch({ onPick }: { onPick: (name: string) => void }) {
+  const [q, setQ] = useState('')
+  const [hits, setHits] = useState<CardHit[]>([])
+  const [searching, setSearching] = useState(false)
+  const [focused, setFocused] = useState(false)
+
+  useEffect(() => {
+    if (q.trim().length < 2) return setHits([])
+    const ac = new AbortController()
+    const t = setTimeout(() => {
+      setSearching(true)
+      searchCards(q, ac.signal)
+        .then(setHits)
+        .catch(() => setHits([]))
+        .finally(() => setSearching(false))
+    }, 250)
+    return () => {
+      clearTimeout(t)
+      ac.abort()
+    }
+  }, [q])
+
+  function pick(name: string) {
+    onPick(name)
+    setQ('')
+    setHits([])
+  }
+
+  return (
+    <div className="ac">
+      <input
+        placeholder="Nome in italiano o inglese, es. Fulmine"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' || !q.trim()) return
+          e.preventDefault()
+          pick(hits[0]?.name ?? q.trim()) // Invio: il primo suggerimento, o il testo così com'è
+        }}
+      />
+      {focused && q.trim().length >= 2 && (
+        <div className="ac-list">
+          {hits.length === 0 ? (
+            <div className="ac-empty muted small">{searching ? 'Cerco su Scryfall…' : 'Nessuna carta trovata. Invio per aggiungerla comunque.'}</div>
+          ) : (
+            hits.map((h) => (
+              <button key={h.name} className="ac-item" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(h.name)}>
+                <span className="grow">
+                  {h.printed ?? h.name}
+                  {h.printed && h.printed !== h.name && <span className="muted small"> · {h.name}</span>}
+                </span>
+                <Icon name="plus" size={16} />
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -445,7 +546,22 @@ function LoanForm({ loan, onClose }: { loan: Loan | null; onClose: () => void })
   const [cards, setCards] = useState(loan?.cards ?? '')
   const [status, setStatus] = useState<LoanStatus>(loan?.status ?? 'prestito')
   const [notes, setNotes] = useState(loan?.notes ?? '')
+  const [entry, setEntry] = useState<'search' | 'paste'>('search')
   const valid = lender && borrower && lender !== borrower && cards.trim()
+
+  // le due modalità lavorano sullo stesso testo (una carta per riga): si può passare dall'una all'altra
+  const lines = cardLines(cards)
+  const setLines = (ls: string[]) => setCards(ls.join('\n'))
+  function addCard(name: string) {
+    const i = lines.findIndex((l) => parseCardLine(l).name.toLowerCase() === name.toLowerCase())
+    if (i < 0) return setLines([...lines, name])
+    const { qty, name: n } = parseCardLine(lines[i])
+    setLines(lines.map((l, j) => (j === i ? formatCardLine(qty + 1, n) : l)))
+  }
+  function setQty(i: number, qty: number) {
+    const { name } = parseCardLine(lines[i])
+    setLines(qty <= 0 ? lines.filter((_, j) => j !== i) : lines.map((l, j) => (j === i ? formatCardLine(qty, name) : l)))
+  }
 
   async function save() {
     if (!valid) return
@@ -466,10 +582,47 @@ function LoanForm({ loan, onClose }: { loan: Loan | null; onClose: () => void })
           <span>A chi</span>
           <PlayerSelect players={players} value={borrower} onChange={setBorrower} exclude={lender} />
         </label>
-        <label className="field">
-          <span>Carte (una per riga)</span>
-          <textarea rows={5} placeholder={'Cyclonic Rift\nSmothering Tithe'} value={cards} onChange={(e) => setCards(e.target.value)} />
-        </label>
+        <div className="field">
+          <span>Carte</span>
+          <Segmented
+            value={entry}
+            onChange={setEntry}
+            options={[
+              { id: 'search', label: 'Cerca carta' },
+              { id: 'paste', label: 'Incolla lista' },
+            ]}
+          />
+          {entry === 'search' ? (
+            <>
+              <CardSearch onPick={addCard} />
+              {lines.length > 0 && (
+                <div className="card-rows">
+                  {lines.map((l, i) => {
+                    const { qty, name } = parseCardLine(l)
+                    return (
+                      <div key={i} className="row line">
+                        <span className="grow">
+                          <CardLink line={name} />
+                        </span>
+                        <span className="stepper">
+                          <button onClick={() => setQty(i, qty - 1)} aria-label={`Togli una ${name}`}>
+                            −
+                          </button>
+                          <b>{qty}</b>
+                          <button onClick={() => setQty(i, qty + 1)} aria-label={`Aggiungi una ${name}`}>
+                            +
+                          </button>
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            <textarea rows={6} placeholder={'Una carta per riga, anche con quantità:\n1 Cyclonic Rift\n2x Smothering Tithe'} value={cards} onChange={(e) => setCards(e.target.value)} />
+          )}
+        </div>
         <div className="field">
           <span>Stato</span>
           <Segmented

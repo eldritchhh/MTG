@@ -78,6 +78,97 @@ export async function downloadCommanderList(onProgress?: (done: number, total: n
   return out.length
 }
 
+// ---------- tutte le carte (solo nomi inglesi, ~35.000 / ~700 KB) per scambi e prestiti ----------
+const NAMES_KEY = 'mtg:cardnames'
+let namesCache: { updated: string; names: string[] } | null | undefined
+let normNames: { src: string[]; norm: string[] } | null = null // nomi normalizzati, calcolati alla prima ricerca
+
+export function getCardNames() {
+  if (namesCache !== undefined) return namesCache
+  try {
+    const raw = localStorage.getItem(NAMES_KEY)
+    namesCache = raw ? JSON.parse(raw) : null
+  } catch {
+    namesCache = null
+  }
+  return namesCache ?? null
+}
+
+export async function downloadCardNames(): Promise<number> {
+  const r = await fetch('https://api.scryfall.com/catalog/card-names', { headers: { Accept: 'application/json' } })
+  if (!r.ok) throw new Error(`Scryfall ha risposto ${r.status}. Riprova tra qualche minuto.`)
+  const j: { data: string[] } = await r.json()
+  namesCache = { updated: new Date().toISOString(), names: j.data }
+  try {
+    localStorage.setItem(NAMES_KEY, JSON.stringify(namesCache))
+  } catch {
+    /* storage pieno o bloccato: la lista resta in memoria finché l'app è aperta */
+  }
+  return j.data.length
+}
+
+export type CardHit = { name: string; printed?: string } // name = nome inglese, printed = nome italiano
+
+// Nomi inglesi (lista offline, altrimenti autocomplete online) + nomi italiani (sempre online, se c'è rete)
+export async function searchCards(q: string, signal?: AbortSignal): Promise<CardHit[]> {
+  const query = norm(q).trim()
+  if (query.length < 2) return []
+  const list = getCardNames()
+  const english = (async (): Promise<CardHit[]> => {
+    if (list) {
+      if (normNames?.src !== list.names) normNames = { src: list.names, norm: list.names.map(norm) }
+      const words = query.split(/\s+/)
+      const out: { name: string; score: number }[] = []
+      normNames.norm.forEach((n, i) => {
+        if (!words.every((w) => n.includes(w))) return
+        // prima chi inizia con il testo, poi chi ha una parola che inizia con il testo (es. "bolt" → Lightning Bolt)
+        out.push({ name: list.names[i], score: n.startsWith(query) ? 0 : n.includes(` ${words[0]}`) ? 1 : 2 })
+      })
+      return out
+        .sort((a, b) => a.score - b.score || a.name.length - b.name.length)
+        .slice(0, 8)
+        .map(({ name }) => ({ name }))
+    }
+    const r = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`, { signal, headers: { Accept: 'application/json' } })
+    if (!r.ok) return []
+    const j: { data: string[] } = await r.json()
+    return j.data.map((name) => ({ name }))
+  })()
+  const italian = (async (): Promise<CardHit[]> => {
+    if (query.length < 3) return []
+    const r = await fetch(`${API}?q=${encodeURIComponent(`${q} lang:it`)}&unique=cards&order=edhrec`, { signal, headers: { Accept: 'application/json' } })
+    if (!r.ok) return [] // 404 = nessun risultato
+    const j: { data: { name: string; printed_name?: string }[] } = await r.json()
+    return j.data.slice(0, 20).map((c) => ({ name: c.name, printed: c.printed_name }))
+  })()
+  const [en, it] = await Promise.allSettled([english, italian])
+  const hits = [...(en.status === 'fulfilled' ? en.value : []), ...(it.status === 'fulfilled' ? it.value : [])].filter(
+    (h) => !/^(.+) \/\/ \1$/.test(h.name), // carte "art series" tipo "Sol Ring // Sol Ring"
+  )
+  // un risultato per carta (vince quello con il nome italiano); prima chi inizia con il testo cercato
+  const byName = new Map<string, CardHit>()
+  for (const h of hits) if (!byName.get(h.name)?.printed) byName.set(h.name, h)
+  const starts = (h: CardHit) => norm(h.name).startsWith(query) || (!!h.printed && norm(h.printed).startsWith(query))
+  const all = [...byName.values()]
+  return [...all.filter(starts), ...all.filter((h) => !starts(h))].slice(0, 8)
+}
+
+// riga di una lista incollata ("2x Sol Ring (C21) 263 *F*") → quantità e nome
+export function parseCardLine(line: string): { qty: number; name: string } {
+  const m = line.trim().match(/^(\d+)\s*x?\s+(.*)$/i)
+  const qty = m ? Number(m[1]) : 1
+  const name = (m ? m[2] : line.trim())
+    .replace(/\s+\*[^*]*\*\s*$/, '') // *F* foil
+    .replace(/\s+\([A-Za-z0-9]{2,6}\)(\s+[\w-]+)?\s*$/, '') // (SET) numero
+    .trim()
+  return { qty, name }
+}
+
+export const formatCardLine = (qty: number, name: string) => (qty > 1 ? `${qty} ${name}` : name)
+
+// pagina Scryfall della carta (ricerca per nome esatto: se il nome è giusto apre direttamente la carta)
+export const scryfallUrl = (name: string) => `https://scryfall.com/search?q=${encodeURIComponent(`!"${name}"`)}`
+
 // ---------- ricerca ----------
 const norm = (s: string) =>
   s

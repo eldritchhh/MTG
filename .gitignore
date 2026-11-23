@@ -5,3 +5,4 @@ dist
 dist-artifact
 *.tsbuildinfo
 android/
+.env.*.local

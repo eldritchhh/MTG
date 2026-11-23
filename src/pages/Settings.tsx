@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMe, useStore } from '../lib/store'
-import { downloadCommanderList, getCommanderList } from '../lib/scryfall'
+import { downloadCardNames, downloadCommanderList, getCardNames, getCommanderList } from '../lib/scryfall'
 import { PLAYER_COLORS, dateIt } from '../lib/util'
 import type { Tier } from '../lib/types'
 import { isCloud, supabase } from '../lib/supabase'
@@ -46,6 +46,7 @@ export default function SettingsPage() {
       {isCloud && <AccessManager />}
       <TierManager />
       <CommanderList />
+      <CardNamesList />
 
       <div className="card stack">
         <h2 className="section">
@@ -255,6 +256,42 @@ function AccessManager() {
           Aggiungi
         </button>
       </div>
+    </div>
+  )
+}
+
+function CardNamesList() {
+  const [list, setList] = useState(getCardNames)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function download() {
+    setErr(null)
+    setBusy(true)
+    try {
+      await downloadCardNames()
+      setList(getCardNames())
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Download non riuscito. Controlla la connessione e riprova.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card stack">
+      <h2 className="section">
+        <Icon name="swap" size={16} /> Lista carte (scambi)
+      </h2>
+      <p className="muted small">
+        {list
+          ? `${list.names.length.toLocaleString('it-IT')} nomi di carte salvati, aggiornati il ${dateIt(list.updated)}. La ricerca delle carte negli scambi li usa anche offline; i nomi in italiano si cercano sempre online.`
+          : 'Non ancora scaricata: negli scambi la ricerca delle carte avviene online su Scryfall. Scaricala (circa 700 KB) per averla più veloce e offline.'}
+      </p>
+      {err && <p className="small neg no-m">{err}</p>}
+      <button onClick={download} disabled={busy}>
+        {busy ? 'Scarico…' : list ? 'Aggiorna lista da Scryfall' : 'Scarica lista da Scryfall'}
+      </button>
     </div>
   )
 }
