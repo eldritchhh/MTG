@@ -59,12 +59,16 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        working-directory: android
+        # apksigner (non jarsigner): Android 11+ rifiuta gli APK senza firma v2 ("App non installata")
         run: |
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/mtg.keystore"
-          npx cap build android --androidreleasetype APK \
-            --keystorepath "$RUNNER_TEMP/mtg.keystore" --keystorepass "$KEYSTORE_PASSWORD" \
-            --keystorealias mtg --keystorealiaspass "$KEYSTORE_PASSWORD"
-          cp android/app/build/outputs/apk/release/app-release-signed.apk mtg-tra-amici.apk
+          ./gradlew assembleRelease --no-daemon
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/mtg.keystore" --ks-key-alias mtg \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD \
+            --out ../mtg-tra-amici.apk app/build/outputs/apk/release/app-release-unsigned.apk
+          "$BT/apksigner" verify --verbose --print-certs ../mtg-tra-amici.apk
 
       - name: APK di debug (senza chiave di firma)
         if: env.HAS_KEYSTORE != 'true'
