@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMe, useStore } from '../lib/store'
 import { downloadCommanderList, getCommanderList } from '../lib/scryfall'
 import { PLAYER_COLORS, dateIt } from '../lib/util'
@@ -43,6 +43,7 @@ export default function SettingsPage() {
         <PlayerSelect players={store.players} value={me ?? ''} onChange={(v) => setMe(v || null)} placeholder="Nessuno" />
       </div>
 
+      {isCloud && <AccessManager />}
       <TierManager />
       <CommanderList />
 
@@ -168,6 +169,89 @@ function TierManager() {
       <div className="row">
         <input id="new-tier" placeholder="Nuovo tier (es. 3, Casual)" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTier()} />
         <button className="primary" onClick={addTier} disabled={!name.trim()}>
+          Aggiungi
+        </button>
+      </div>
+    </div>
+  )
+}
+
+interface AllowedEmail {
+  email: string
+  is_admin: boolean
+}
+
+// Visibile solo all'admin: chi è in lista può registrarsi, chi viene tolto perde l'accesso ai dati
+function AccessManager() {
+  const [rows, setRows] = useState<AllowedEmail[] | null>(null)
+  const [myEmail, setMyEmail] = useState<string | null>(null)
+  const [email, setEmail] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+
+  async function load() {
+    const [{ data: u }, { data, error }] = await Promise.all([
+      supabase!.auth.getUser(),
+      supabase!.from('allowed_emails').select('email, is_admin').order('created_at'),
+    ])
+    setMyEmail(u.user?.email?.toLowerCase() ?? null)
+    setRows(error ? [] : (data as AllowedEmail[]))
+  }
+  useEffect(() => {
+    load()
+  }, [])
+
+  const isAdmin = rows?.some((r) => r.email === myEmail && r.is_admin)
+  if (!isAdmin) return null
+
+  async function addEmail() {
+    const e = email.trim().toLowerCase()
+    if (!e) return
+    setErr(null)
+    const { error } = await supabase!.from('allowed_emails').insert({ email: e })
+    if (error) setErr(error.code === '23505' ? 'Email già in lista.' : error.message)
+    else setEmail('')
+    load()
+  }
+
+  async function removeEmail(e: string) {
+    if (!(await ask(`Togliere ${e}? Non potrà più registrarsi e, se ha già un account, non vedrà più i dati.`))) return
+    const { error } = await supabase!.from('allowed_emails').delete().eq('email', e)
+    if (error) setErr(error.message)
+    load()
+  }
+
+  return (
+    <div className="card stack">
+      <h2 className="section">
+        <Icon name="users" size={16} /> Accesso
+      </h2>
+      <p className="muted small">Solo queste email possono registrarsi. Aggiungi quella di un amico, poi lui si registra dall'app con la sua password.</p>
+      <div className="stack-sm">
+        {rows!.map((r) => (
+          <div key={r.email} className="row">
+            <span className="grow" style={{ overflowWrap: 'anywhere' }}>
+              {r.email}
+              {r.is_admin && <span className="muted small"> · admin</span>}
+            </span>
+            {r.email !== myEmail && (
+              <button className="icon-btn sm danger" aria-label={`Togli ${r.email}`} onClick={() => removeEmail(r.email)}>
+                <Icon name="x" size={14} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {err && <p className="small neg no-m">{err}</p>}
+      <div className="row">
+        <input
+          id="new-allowed-email"
+          type="email"
+          placeholder="email@amico.it"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && addEmail()}
+        />
+        <button className="primary" onClick={addEmail} disabled={!email.trim()}>
           Aggiungi
         </button>
       </div>

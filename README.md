@@ -10,7 +10,7 @@ Web app (installabile sul telefono) per il gruppo di Magic:
 - **Tier dinamici** (es. S, 1, 2) – si aggiungono, rinominano e riordinano da *Altro → Tier*. Ogni partita salva il tier che il mazzo aveva quel giorno: il filtro per tier delle statistiche usa quello, così i numeri non cambiano quando spostate un mazzo di tier.
 - **Statistiche** – vittorie e % (vinte su giocate) per mazzo, giocatore, tag e colore; storico partite; filtri per periodo (30/90 giorni) e per **tier**.
 - **Lista comandanti** – da *Altro → Lista comandanti* la scarichi da Scryfall e la aggiorni quando vuoi (es. dopo un nuovo set): la ricerca diventa istantanea e funziona offline. Senza lista, la ricerca avviene online.
-- **Altro** – "Chi sei?" (per vedere il tuo saldo), backup/import JSON, logout.
+- **Altro** – accesso (l'admin sceglie quali email possono registrarsi), "Chi sei?" (per vedere il tuo saldo), backup/import JSON, logout.
 
 Costo: **0 €** (GitHub Pages + Supabase piano gratuito).
 
@@ -34,9 +34,9 @@ Senza configurazione i dati restano nel browser del dispositivo.
 4. **Project Settings → API**: copia *Project URL* e la chiave *anon / public*.
 5. In locale: copia `.env.example` in `.env.local` e incolla i due valori.
 
-Ognuno si registra con email e password dall'app. Quando vi siete registrati tutti puoi disattivare
-*Allow new users to sign up* (Authentication → Sign In / Providers) così nessun altro può entrare.
-Le tabelle sono leggibili/scrivibili solo dagli utenti loggati (Row Level Security).
+Ognuno si registra con email e password dall'app, ma solo con un'email autorizzata: la prima persona
+che si registra diventa admin e da *Altro → Accesso* aggiunge o toglie le email degli amici.
+Le tabelle sono leggibili/scrivibili solo dagli utenti loggati con email in lista (Row Level Security).
 
 > Nota: i progetti Supabase free vengono messi in pausa dopo ~7 giorni senza alcun utilizzo; si riattivano con un clic dalla dashboard.
 

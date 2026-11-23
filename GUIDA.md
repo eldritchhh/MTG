@@ -57,11 +57,14 @@ Da qui in poi l'APK si ricostruisce da solo a ogni push su `main`.
    (se il repo è privato devi essere loggato su GitHub dal telefono).
 2. Apri il file: Android chiede di permettere l'installazione da questa fonte (browser o file manager) → consenti.
 3. Se compare *Play Protect* dì **Installa comunque**: l'app non è sul Play Store, è normale.
-4. Apri **MTG tra amici** → **Registrati** con email e password. Ogni amico fa lo stesso dal suo telefono.
-5. In **Altro → Chi sei?** scegli il tuo nome (dopo averlo creato in Profili), poi **Altro → Lista comandanti → Scarica**.
+4. Apri **MTG tra amici** → **Registrati** con email e password. **La prima persona che si registra
+   diventa admin.**
+5. L'admin, in **Altro → Accesso**, aggiunge l'email di ogni amico. Solo le email in lista possono
+   registrarsi: gli altri ricevono "email non autorizzata". Se togli un'email, quella persona non vede più i dati.
+6. Ogni amico installa l'APK e si **registra** con l'email che hai aggiunto e una password sua.
+7. In **Altro → Chi sei?** scegli il tuo nome (dopo averlo creato in Profili), poi **Altro → Lista comandanti → Scarica**.
 
-Quando vi siete registrati tutti, su Supabase disattiva **Allow new users to sign up**
-(Authentication → Sign In / Providers) così nessun altro può entrare.
+Lascia attivo *Allow new users to sign up* su Supabase: a filtrare ci pensa la lista delle email.
 
 ## Aggiornare l'app sui telefoni
 
