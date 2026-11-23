@@ -10,6 +10,29 @@ const QUERY = '(is:commander or t:background) game:paper'
 const API = 'https://api.scryfall.com/cards/search'
 const LIST_KEY = 'mtg:commanders'
 
+// Scryfall: /cards/search al massimo 2 richieste al secondo; un 429 blocca l'accesso per 30 secondi.
+// Tutte le ricerche passano da qui e partono a distanza di almeno SEARCH_GAP ms l'una dall'altra.
+const SEARCH_GAP = 550
+let nextSearchAt = 0
+
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'))
+    const t = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(t)
+      reject(new DOMException('Aborted', 'AbortError'))
+    })
+  })
+
+async function searchFetch(url: string, signal?: AbortSignal) {
+  const now = Date.now()
+  const at = Math.max(now, nextSearchAt)
+  nextSearchAt = at + SEARCH_GAP
+  await sleep(at - now, signal)
+  return fetch(url, { signal, headers: { Accept: 'application/json' } })
+}
+
 type Raw = {
   name: string
   color_identity?: string[]
@@ -65,14 +88,26 @@ function saveCommanderList(cards: Commander[]) {
 export async function downloadCommanderList(onProgress?: (done: number, total: number) => void): Promise<number> {
   let url: string | null = `${API}?q=${encodeURIComponent(QUERY)}&unique=cards&order=edhrec`
   const out: Commander[] = []
+  let retries = 0
   while (url) {
-    const r: Response = await fetch(url, { headers: { Accept: 'application/json' } })
+    let r: Response | null = null
+    try {
+      r = await searchFetch(url)
+    } catch {
+      r = null // rete assente, oppure un 429 senza intestazioni CORS che il browser riporta come errore di rete
+    }
+    if (!r || r.status === 429) {
+      // Scryfall ci ha rallentato: aspetto che scada il blocco (30 s) e riprovo la stessa pagina
+      if (++retries > 2) throw new Error('Scryfall non risponde o ci sta limitando. Riprova tra qualche minuto.')
+      await sleep(31000)
+      continue
+    }
     if (!r.ok) throw new Error(`Scryfall ha risposto ${r.status}. Riprova tra qualche minuto.`)
+    retries = 0
     const j: { data: Raw[]; has_more: boolean; next_page?: string; total_cards: number } = await r.json()
     out.push(...j.data.map(toCommander))
     onProgress?.(out.length, j.total_cards)
     url = j.has_more && j.next_page ? j.next_page : null
-    if (url) await new Promise((res) => setTimeout(res, 120)) // Scryfall chiede max ~10 richieste al secondo
   }
   saveCommanderList(out)
   return out.length
@@ -136,7 +171,7 @@ export async function searchCards(q: string, signal?: AbortSignal): Promise<Card
   })()
   const italian = (async (): Promise<CardHit[]> => {
     if (query.length < 3) return []
-    const r = await fetch(`${API}?q=${encodeURIComponent(`${q} lang:it`)}&unique=cards&order=edhrec`, { signal, headers: { Accept: 'application/json' } })
+    const r = await searchFetch(`${API}?q=${encodeURIComponent(`${q} lang:it`)}&unique=cards&order=edhrec`, signal)
     if (!r.ok) return [] // 404 = nessun risultato
     const j: { data: { name: string; printed_name?: string }[] } = await r.json()
     return j.data.slice(0, 20).map((c) => ({ name: c.name, printed: c.printed_name }))
@@ -189,7 +224,7 @@ export async function searchCommanders(q: string, opts: { pairOnly?: boolean; si
   }
   // nessuna lista scaricata: cerco online
   const extra = opts.pairOnly ? ' (keyword:partner or t:background or o:"choose a background" or keyword:"friends forever")' : ''
-  const r = await fetch(`${API}?q=${encodeURIComponent(`${q} ${QUERY}${extra}`)}&order=edhrec`, { signal: opts.signal, headers: { Accept: 'application/json' } })
+  const r = await searchFetch(`${API}?q=${encodeURIComponent(`${q} ${QUERY}${extra}`)}&order=edhrec`, opts.signal)
   if (!r.ok) return [] // 404 = nessun risultato
   const j: { data: Raw[] } = await r.json()
   return j.data.slice(0, 8).map(toCommander)

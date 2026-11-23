@@ -328,7 +328,7 @@ function CommanderList() {
         <div className="progress">
           <i style={{ width: progress[1] ? `${(progress[0] / progress[1]) * 100}%` : '5%' }} />
           <span className="small muted">
-            {progress[1] ? `${progress[0]} / ${progress[1]}` : 'Collegamento a Scryfall…'}
+            {progress[1] ? `${progress[0]} / ${progress[1]} · circa 20 secondi` : 'Collegamento a Scryfall…'}
           </span>
         </div>
       )}
