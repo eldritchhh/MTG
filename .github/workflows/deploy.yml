@@ -19,6 +19,7 @@ jobs:
     # parte solo se hai attivato Pages e creato la variabile ENABLE_PAGES = true (vedi GUIDA.md)
     if: vars.ENABLE_PAGES == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: env
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
