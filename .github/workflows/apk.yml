@@ -1,0 +1,77 @@
+name: APK Android
+
+# Costruisce l'APK a ogni push su main (o a mano da Actions > APK Android > Run workflow)
+# e lo pubblica come Release: dal telefono apri la pagina Releases del repo e scarichi il file .apk.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      - name: Build web app
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Progetto Android (Capacitor)
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      # Se hai salvato una chiave di firma nei Secrets l'APK è firmato sempre uguale
+      # e i telefoni possono aggiornare l'app senza disinstallarla (vedi README).
+      - name: APK firmato
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/mtg.keystore"
+          npx cap build android --androidreleasetype APK \
+            --keystorepath "$RUNNER_TEMP/mtg.keystore" --keystorepass "$KEYSTORE_PASSWORD" \
+            --keystorealias mtg --keystorealiaspass "$KEYSTORE_PASSWORD"
+          cp android/app/build/outputs/apk/release/*.apk mtg-tra-amici.apk
+
+      - name: APK di debug (senza chiave di firma)
+        if: env.HAS_KEYSTORE != 'true'
+        working-directory: android
+        run: |
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../mtg-tra-amici.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mtg-tra-amici-apk
+          path: mtg-tra-amici.apk
+
+      - name: Pubblica come Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: APK ${{ github.run_number }}
+          body: APK costruito da ${{ github.sha }}. Sul telefono scarica mtg-tra-amici.apk e aprilo.
+          files: mtg-tra-amici.apk
+          make_latest: true
