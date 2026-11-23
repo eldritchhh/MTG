@@ -64,7 +64,7 @@ jobs:
           npx cap build android --androidreleasetype APK \
             --keystorepath "$RUNNER_TEMP/mtg.keystore" --keystorepass "$KEYSTORE_PASSWORD" \
             --keystorealias mtg --keystorealiaspass "$KEYSTORE_PASSWORD"
-          cp android/app/build/outputs/apk/release/*.apk mtg-tra-amici.apk
+          cp android/app/build/outputs/apk/release/app-release-signed.apk mtg-tra-amici.apk
 
       - name: APK di debug (senza chiave di firma)
         if: env.HAS_KEYSTORE != 'true'
