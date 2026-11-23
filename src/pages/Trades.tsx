@@ -474,26 +474,23 @@ function CardLink({ line }: { line: string }) {
   )
 }
 
-// ricerca con autocompletamento: nomi inglesi (offline se la lista è scaricata) e italiani (online)
+// ricerca con autocompletamento nella lista carte dell'app (inglese e italiano, offline)
 function CardSearch({ onPick }: { onPick: (name: string) => void }) {
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<CardHit[]>([])
-  const [searching, setSearching] = useState(false)
   const [focused, setFocused] = useState(false)
 
   useEffect(() => {
     if (q.trim().length < 2) return setHits([])
-    const ac = new AbortController()
+    let stale = false
     const t = setTimeout(() => {
-      setSearching(true)
-      searchCards(q, ac.signal)
-        .then(setHits)
-        .catch(() => setHits([]))
-        .finally(() => setSearching(false))
-    }, 250)
+      searchCards(q)
+        .then((h) => !stale && setHits(h))
+        .catch(() => !stale && setHits([]))
+    }, 120)
     return () => {
+      stale = true
       clearTimeout(t)
-      ac.abort()
     }
   }, [q])
 
@@ -520,7 +517,7 @@ function CardSearch({ onPick }: { onPick: (name: string) => void }) {
       {focused && q.trim().length >= 2 && (
         <div className="ac-list">
           {hits.length === 0 ? (
-            <div className="ac-empty muted small">{searching ? 'Cerco su Scryfall…' : 'Nessuna carta trovata. Invio per aggiungerla comunque.'}</div>
+            <div className="ac-empty muted small">Nessuna carta trovata. Invio per aggiungerla comunque.</div>
           ) : (
             hits.map((h) => (
               <button key={h.name} className="ac-item" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(h.name)}>

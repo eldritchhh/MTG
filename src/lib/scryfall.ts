@@ -113,79 +113,130 @@ export async function downloadCommanderList(onProgress?: (done: number, total: n
   return out.length
 }
 
-// ---------- tutte le carte (solo nomi inglesi, ~35.000 / ~700 KB) per scambi e prestiti ----------
-const NAMES_KEY = 'mtg:cardnames'
-let namesCache: { updated: string; names: string[] } | null | undefined
-let normNames: { src: string[]; norm: string[] } | null = null // nomi normalizzati, calcolati alla prima ricerca
+// ---------- tutte le carte (nome inglese + italiano) per scambi e prestiti ----------
+// La base (public/cards.json, ~35.000 carte, generata con scripts/build-card-names.py) è dentro l'app:
+// la ricerca è solo offline. "Cerca carte nuove" chiede a Scryfall soltanto le carte uscite dopo
+// l'ultimo aggiornamento e le salva sul dispositivo: nessuna carta già presente viene richiesta di nuovo.
+type CardEntry = [string] | [string, string] // [inglese] oppure [inglese, italiano]
+type CardFile = { updated: string; cards: CardEntry[] }
+type CardIndex = { updated: string; en: string[]; it: (string | undefined)[]; nen: string[]; nit: string[] }
+const DELTA_KEY = 'mtg:cards-new'
 
-export function getCardNames() {
-  if (namesCache !== undefined) return namesCache
+let baseP: Promise<CardFile> | null = null
+let indexP: Promise<CardIndex> | null = null
+
+const loadBase = () =>
+  (baseP ??= fetch('./cards.json').then((r) => {
+    if (!r.ok) throw new Error('Lista carte non trovata')
+    return r.json()
+  }))
+
+function readDelta(): CardFile | null {
   try {
-    const raw = localStorage.getItem(NAMES_KEY)
-    namesCache = raw ? JSON.parse(raw) : null
+    localStorage.removeItem('mtg:cardnames') // vecchia lista solo inglese, non serve più
+    const raw = localStorage.getItem(DELTA_KEY)
+    return raw ? JSON.parse(raw) : null
   } catch {
-    namesCache = null
+    return null
   }
-  return namesCache ?? null
 }
 
-export async function downloadCardNames(): Promise<number> {
-  const r = await fetch('https://api.scryfall.com/catalog/card-names', { headers: { Accept: 'application/json' } })
-  if (!r.ok) throw new Error(`Scryfall ha risposto ${r.status}. Riprova tra qualche minuto.`)
-  const j: { data: string[] } = await r.json()
-  namesCache = { updated: new Date().toISOString(), names: j.data }
-  try {
-    localStorage.setItem(NAMES_KEY, JSON.stringify(namesCache))
-  } catch {
-    /* storage pieno o bloccato: la lista resta in memoria finché l'app è aperta */
+function buildIndex(base: CardFile, delta: CardFile | null): CardIndex {
+  const map = new Map<string, string | undefined>(base.cards.map(([en, it]) => [en, it]))
+  for (const [en, it] of delta?.cards ?? []) map.set(en, it ?? map.get(en))
+  const en = [...map.keys()]
+  const it = en.map((n) => map.get(n))
+  return { updated: delta?.updated ?? base.updated, en, it, nen: en.map(norm), nit: it.map((x) => (x ? norm(x) : '')) }
+}
+
+const loadCardIndex = () =>
+  (indexP ??= loadBase()
+    .then((b) => buildIndex(b, readDelta()))
+    .catch((e) => {
+      indexP = baseP = null
+      throw e
+    }))
+
+export async function cardListInfo() {
+  const ix = await loadCardIndex()
+  return { updated: ix.updated, count: ix.en.length, italian: ix.it.filter(Boolean).length }
+}
+
+type RawPrint = { name: string; layout?: string; printed_name?: string; card_faces?: { printed_name?: string }[] }
+const SKIP_LAYOUTS = new Set(['token', 'double_faced_token', 'emblem', 'art_series', 'reversible_card'])
+
+// tutte le pagine di una ricerca Scryfall, rispettando il limite (404 = nessun risultato)
+async function searchAllPages(q: string): Promise<RawPrint[]> {
+  const out: RawPrint[] = []
+  let url: string | null = `${API}?q=${encodeURIComponent(q)}&unique=cards`
+  while (url) {
+    const r = await searchFetch(url)
+    if (r.status === 404) break
+    if (!r.ok) throw new Error(`Scryfall ha risposto ${r.status}. Riprova tra qualche minuto.`)
+    const j: { data: RawPrint[]; has_more: boolean; next_page?: string } = await r.json()
+    // fuori token & co. e le stampe fronte-retro uguali ("Momentary Blink // Momentary Blink")
+    out.push(...j.data.filter((c) => !SKIP_LAYOUTS.has(c.layout ?? '') && !/^(.+) \/\/ \1$/.test(c.name)))
+    url = j.has_more && j.next_page ? j.next_page : null
   }
-  return j.data.length
+  return out
+}
+
+// Chiede solo le stampe uscite dal giorno dell'ultimo aggiornamento: carte nuove e nuove traduzioni
+// (anche di carte vecchie ristampate in italiano). Restituisce quante carte o traduzioni sono state aggiunte.
+export async function updateCardList(): Promise<number> {
+  const [base, ix] = await Promise.all([loadBase(), loadCardIndex()])
+  const since = ix.updated
+  const english = await searchAllPages(`date>=${since} game:paper`)
+  const italian = await searchAllPages(`lang:it date>=${since} game:paper`)
+  const known = new Map(ix.en.map((n, i) => [n, ix.it[i]]))
+  const delta = new Map<string, string | undefined>((readDelta()?.cards ?? []).map(([en, it]) => [en, it]))
+  let added = 0
+  for (const c of english) {
+    if (known.has(c.name) || delta.has(c.name)) continue
+    delta.set(c.name, undefined)
+    added++
+  }
+  for (const c of italian) {
+    const faces = c.card_faces?.map((f) => f.printed_name)
+    const it = c.printed_name ?? (faces?.length && faces.every(Boolean) ? faces.join(' // ') : undefined)
+    if (!it || (known.get(c.name) ?? delta.get(c.name)) === it) continue
+    if (!known.get(c.name) && !delta.get(c.name)) added++
+    delta.set(c.name, it)
+  }
+  const file: CardFile = {
+    updated: new Date().toISOString().slice(0, 10),
+    cards: [...delta].map(([en, it]) => (it ? [en, it] : [en])),
+  }
+  try {
+    localStorage.setItem(DELTA_KEY, JSON.stringify(file))
+  } catch {
+    /* storage pieno o bloccato: le carte nuove restano finché l'app è aperta */
+  }
+  indexP = Promise.resolve(buildIndex(base, file))
+  return added
 }
 
 export type CardHit = { name: string; printed?: string } // name = nome inglese, printed = nome italiano
 
-// Nomi inglesi (lista offline, altrimenti autocomplete online) + nomi italiani (sempre online, se c'è rete)
-export async function searchCards(q: string, signal?: AbortSignal): Promise<CardHit[]> {
+// Ricerca offline per nome inglese o italiano
+export async function searchCards(q: string): Promise<CardHit[]> {
   const query = norm(q).trim()
   if (query.length < 2) return []
-  const list = getCardNames()
-  const english = (async (): Promise<CardHit[]> => {
-    if (list) {
-      if (normNames?.src !== list.names) normNames = { src: list.names, norm: list.names.map(norm) }
-      const words = query.split(/\s+/)
-      const out: { name: string; score: number }[] = []
-      normNames.norm.forEach((n, i) => {
-        if (!words.every((w) => n.includes(w))) return
-        // prima chi inizia con il testo, poi chi ha una parola che inizia con il testo (es. "bolt" → Lightning Bolt)
-        out.push({ name: list.names[i], score: n.startsWith(query) ? 0 : n.includes(` ${words[0]}`) ? 1 : 2 })
-      })
-      return out
-        .sort((a, b) => a.score - b.score || a.name.length - b.name.length)
-        .slice(0, 8)
-        .map(({ name }) => ({ name }))
-    }
-    const r = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`, { signal, headers: { Accept: 'application/json' } })
-    if (!r.ok) return []
-    const j: { data: string[] } = await r.json()
-    return j.data.map((name) => ({ name }))
-  })()
-  const italian = (async (): Promise<CardHit[]> => {
-    if (query.length < 3) return []
-    const r = await searchFetch(`${API}?q=${encodeURIComponent(`${q} lang:it`)}&unique=cards&order=edhrec`, signal)
-    if (!r.ok) return [] // 404 = nessun risultato
-    const j: { data: { name: string; printed_name?: string }[] } = await r.json()
-    return j.data.slice(0, 20).map((c) => ({ name: c.name, printed: c.printed_name }))
-  })()
-  const [en, it] = await Promise.allSettled([english, italian])
-  const hits = [...(en.status === 'fulfilled' ? en.value : []), ...(it.status === 'fulfilled' ? it.value : [])].filter(
-    (h) => !/^(.+) \/\/ \1$/.test(h.name), // carte "art series" tipo "Sol Ring // Sol Ring"
-  )
-  // un risultato per carta (vince quello con il nome italiano); prima chi inizia con il testo cercato
-  const byName = new Map<string, CardHit>()
-  for (const h of hits) if (!byName.get(h.name)?.printed) byName.set(h.name, h)
-  const starts = (h: CardHit) => norm(h.name).startsWith(query) || (!!h.printed && norm(h.printed).startsWith(query))
-  const all = [...byName.values()]
-  return [...all.filter(starts), ...all.filter((h) => !starts(h))].slice(0, 8)
+  const ix = await loadCardIndex()
+  const words = query.split(/\s+/)
+  // nome identico, poi chi inizia con il testo, poi chi ha una parola che inizia con il testo (es. "bolt" → Lightning Bolt)
+  const score = (n: string) =>
+    !n || !words.every((w) => n.includes(w)) ? 9 : n === query ? -1 : n.startsWith(query) ? 0 : n.includes(` ${words[0]}`) ? 1 : 2
+  const out: { i: number; s: number; len: number }[] = []
+  for (let i = 0; i < ix.en.length; i++) {
+    const se = score(ix.nen[i])
+    const st = score(ix.nit[i])
+    if (se < 9 || st < 9) out.push({ i, s: Math.min(se, st), len: st < se ? ix.nit[i].length : ix.nen[i].length })
+  }
+  return out
+    .sort((a, b) => a.s - b.s || a.len - b.len)
+    .slice(0, 8)
+    .map(({ i }) => ({ name: ix.en[i], printed: ix.it[i] }))
 }
 
 // riga di una lista incollata ("2x Sol Ring (C21) 263 *F*") → quantità e nome

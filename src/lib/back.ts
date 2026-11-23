@@ -23,11 +23,17 @@ export function useBack(handler: (() => void) | null | false) {
   }, [active])
 }
 
+// true se qualcuno ha gestito l'indietro (separata dal listener per poterla provare anche nel browser)
+export function handleBack(): boolean {
+  const top = stack[stack.length - 1]
+  if (!top) return false
+  top()
+  return true
+}
+
 export function initBackButton() {
   if (!Capacitor.isNativePlatform()) return
   App.addListener('backButton', () => {
-    const top = stack[stack.length - 1]
-    if (top) top()
-    else App.minimizeApp()
+    if (!handleBack()) App.minimizeApp()
   })
 }

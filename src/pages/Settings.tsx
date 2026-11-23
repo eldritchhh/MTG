@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMe, useStore } from '../lib/store'
-import { downloadCardNames, downloadCommanderList, getCardNames, getCommanderList } from '../lib/scryfall'
+import { cardListInfo, downloadCommanderList, getCommanderList, updateCardList } from '../lib/scryfall'
 import { PLAYER_COLORS, dateIt } from '../lib/util'
 import type { Tier } from '../lib/types'
 import { isCloud, supabase } from '../lib/supabase'
@@ -261,18 +261,24 @@ function AccessManager() {
 }
 
 function CardNamesList() {
-  const [list, setList] = useState(getCardNames)
+  const [info, setInfo] = useState<{ updated: string; count: number; italian: number } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  useEffect(() => {
+    cardListInfo().then(setInfo, () => setErr('Lista carte non disponibile.'))
+  }, [])
 
-  async function download() {
+  async function update() {
     setErr(null)
+    setMsg(null)
     setBusy(true)
     try {
-      await downloadCardNames()
-      setList(getCardNames())
+      const n = await updateCardList()
+      setInfo(await cardListInfo())
+      setMsg(n ? `Aggiunte ${n} carte o traduzioni nuove.` : 'Nessuna carta nuova: la lista è già aggiornata.')
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Download non riuscito. Controlla la connessione e riprova.')
+      setErr(e instanceof Error ? e.message : 'Aggiornamento non riuscito. Controlla la connessione e riprova.')
     } finally {
       setBusy(false)
     }
@@ -284,13 +290,15 @@ function CardNamesList() {
         <Icon name="swap" size={16} /> Lista carte (scambi)
       </h2>
       <p className="muted small">
-        {list
-          ? `${list.names.length.toLocaleString('it-IT')} nomi di carte salvati, aggiornati il ${dateIt(list.updated)}. La ricerca delle carte negli scambi li usa anche offline; i nomi in italiano si cercano sempre online.`
-          : 'Non ancora scaricata: negli scambi la ricerca delle carte avviene online su Scryfall. Scaricala (circa 700 KB) per averla più veloce e offline.'}
+        {info
+          ? `${info.count.toLocaleString('it-IT')} carte, ${info.italian.toLocaleString('it-IT')} con il nome italiano, aggiornate al ${dateIt(info.updated)}. La ricerca negli scambi funziona offline.`
+          : 'Carico la lista…'}
       </p>
+      <p className="muted small no-m">Dopo l'uscita di un nuovo set: scarica da Scryfall solo le carte uscite dall'ultimo aggiornamento.</p>
+      {msg && <p className="small no-m">{msg}</p>}
       {err && <p className="small neg no-m">{err}</p>}
-      <button onClick={download} disabled={busy}>
-        {busy ? 'Scarico…' : list ? 'Aggiorna lista da Scryfall' : 'Scarica lista da Scryfall'}
+      <button onClick={update} disabled={busy || !info}>
+        {busy ? 'Cerco carte nuove…' : 'Cerca carte nuove su Scryfall'}
       </button>
     </div>
   )

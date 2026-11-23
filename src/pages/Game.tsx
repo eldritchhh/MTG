@@ -206,6 +206,8 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
   const [moving, setMoving] = useState<number | null>(null) // posto tenuto premuto, da spostare
   const elapsed = useElapsed(live.startedAt)
   useBack(moving !== null && (() => setMoving(null)))
+  // indietro durante la partita (senza finestre aperte): apre il menu Termina / Annulla / …
+  useBack(moving === null && !menu && !ending && panel === null && (() => setMenu(true)))
 
   // scambia due posti; i danni da comandante sono indicizzati per posto, quindi vanno rimappati
   function swap(a: number, b: number) {
