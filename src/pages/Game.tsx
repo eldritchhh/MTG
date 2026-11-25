@@ -12,7 +12,7 @@ type Seat = {
   deck_id: string | null
   life: number
   poison: number
-  cmd: Record<number, number> // danni ricevuti dal comandante del posto i
+  cmd: Record<string, number> // danni ricevuti dal comandante del posto i ("2") e dal suo partner ("2p")
   eliminated_order: number | null
 }
 type Live = { startedAt: string; startingLife: number; seats: Seat[]; table: boolean }
@@ -44,13 +44,34 @@ export default function GamePage() {
 
 // ------------------------------------------------------------ SETUP
 function Setup({ onStart }: { onStart: (l: Live) => void }) {
-  const { players, decks, games } = useStore()
+  const { players, decks, games, tiers } = useStore()
   const [sel, setSel] = useState<string[]>([])
   const [deckOf, setDeckOf] = useState<Record<string, string>>({})
   const [life, setLife] = useState(40)
   const [picking, setPicking] = useState<string | null>(null)
+  const [tier, setTier] = useState<string | null>(null) // null = misto
+  const [noDeck, setNoDeck] = useState<string[]>([]) // giocatori senza mazzi del tier scelto
   const P = byId(players)
   const D = byId(decks)
+  const sortedTiers = [...tiers].sort((a, b) => a.sort_order - b.sort_order)
+
+  // un mazzo a caso per ogni giocatore, tra i suoi mazzi attivi del tier scelto (o di qualsiasi tier)
+  function randomDecks() {
+    const next = { ...deckOf }
+    const missing: string[] = []
+    for (const id of sel) {
+      const pool = decks.filter((d) => d.player_id === id && d.active && (tier === null || d.tier_id === tier))
+      if (!pool.length) {
+        missing.push(id)
+        continue
+      }
+      // se possibile evito di riproporre lo stesso mazzo di prima
+      const fresh = pool.length > 1 ? pool.filter((d) => d.id !== deckOf[id]) : pool
+      next[id] = fresh[Math.floor(Math.random() * fresh.length)].id
+    }
+    setDeckOf(next)
+    setNoDeck(missing)
+  }
 
   // mazzo proposto: l'ultimo giocato da quel giocatore, altrimenti il primo attivo
   const lastDeck = useMemo(() => {
@@ -61,6 +82,7 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
   }, [games])
 
   function toggle(id: string) {
+    setNoDeck([])
     if (sel.includes(id)) return setSel(sel.filter((x) => x !== id))
     setSel([...sel, id])
     if (!deckOf[id]) {
@@ -95,6 +117,28 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
       {sel.length > 0 && (
         <>
           <h2>Con che mazzo?</h2>
+          <div className="card stack-sm">
+            {sortedTiers.length > 0 && (
+              <div className="chips">
+                <button className={`tier-chip none ${tier === null ? 'on' : ''}`} onClick={() => setTier(null)}>
+                  Misto
+                </button>
+                {sortedTiers.map((t) => (
+                  <button key={t.id} className={`tier-chip ${tier === t.id ? 'on' : ''}`} style={{ ['--tc' as string]: t.color }} onClick={() => setTier(t.id)}>
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={randomDecks}>
+              <Icon name="dice" size={18} /> Mazzi a caso{tier ? ` (tier ${sortedTiers.find((t) => t.id === tier)?.name})` : ''}
+            </button>
+            {noDeck.length > 0 && (
+              <p className="small neg no-m">
+                Nessun mazzo {tier ? `di tier ${sortedTiers.find((t) => t.id === tier)?.name}` : 'attivo'} per {noDeck.map((id) => P[id]?.name).join(', ')}: scegli a mano.
+              </p>
+            )}
+          </div>
           <div className="list">
             {sel.map((id, i) => (
               <button key={id} className="list-item seat-setup" style={{ ['--pc' as string]: P[id]?.color }} onClick={() => setPicking(id)}>
@@ -118,6 +162,7 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
       {picking && (
         <DeckPicker
           owner={picking}
+          initialTier={tier}
           value={deckOf[picking] ?? ''}
           onClose={() => setPicking(null)}
           onPick={(v) => {
@@ -143,11 +188,11 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
   )
 }
 
-function DeckPicker({ owner, value, onPick, onClose }: { owner: string; value: string; onPick: (id: string) => void; onClose: () => void }) {
+function DeckPicker({ owner, value, initialTier, onPick, onClose }: { owner: string; value: string; initialTier: string | null; onPick: (id: string) => void; onClose: () => void }) {
   const { decks, players, tiers } = useStore()
   const P = byId(players)
   const [q, setQ] = useState('')
-  const [tier, setTier] = useState<string | null>(null)
+  const [tier, setTier] = useState<string | null>(initialTier)
   const match = (d: Deck) => d.active && (!tier || d.tier_id === tier) && (!q.trim() || deckLabel(d).toLowerCase().includes(q.trim().toLowerCase()) || d.tags.some((t) => t.includes(q.trim().toLowerCase())))
   const own = decks.filter((d) => d.player_id === owner && match(d))
   const others = decks.filter((d) => d.player_id !== owner && match(d))
@@ -214,7 +259,8 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
     setMoving(null)
     if (a === b) return
     const map = (j: number) => (j === a ? b : j === b ? a : j)
-    const seats = live.seats.map((s) => ({ ...s, cmd: Object.fromEntries(Object.entries(s.cmd).map(([k, v]) => [map(Number(k)), v])) }))
+    const remap = (k: string) => k.replace(/^\d+/, (n) => String(map(Number(n)))) // "2p" → "0p"
+    const seats = live.seats.map((s) => ({ ...s, cmd: Object.fromEntries(Object.entries(s.cmd).map(([k, v]) => [remap(k), v])) }))
     ;[seats[a], seats[b]] = [seats[b], seats[a]]
     setLive({ ...live, seats })
   }
@@ -463,28 +509,45 @@ function CounterPanel({ live, idx, P, D, onClose, change }: { live: Live; idx: n
     <Modal title={`Contatori di ${P[seat.player_id]?.name ?? ''}`} onClose={onClose}>
       <div className="stack">
         <h3>Danni da comandante ricevuti</h3>
-        <p className="muted small">Il + toglie anche 1 punto vita. A 21 da uno stesso comandante si è fuori.</p>
-        {live.seats.map((src, j) =>
-          j === idx ? null : (
-            <div key={j} className="row between line">
-              <span className="row grow">
-                <Avatar p={P[src.player_id]} size={22} />
-                <span className="small">{src.deck_id ? deckLabel(D[src.deck_id]) : P[src.player_id]?.name}</span>
-              </span>
-              <Stepper
-                value={seat.cmd[j] ?? 0}
-                danger={(seat.cmd[j] ?? 0) >= 21}
-                onChange={(d) =>
-                  change((s) => {
-                    const cur = s.cmd[j] ?? 0
-                    const nv = Math.max(0, cur + d)
-                    return { ...s, cmd: { ...s.cmd, [j]: nv }, life: s.life - (nv - cur) }
-                  })
-                }
-              />
+        <p className="muted small">I danni tolgono anche i punti vita. A 21 da uno stesso comandante si è fuori: con i partner ognuno dei due conta a parte.</p>
+        {live.seats.map((src, j) => {
+          if (j === idx) return null
+          const deck = src.deck_id ? D[src.deck_id] : undefined
+          // un contatore per comandante: con partner/background due contatori separati
+          const sources = [
+            { key: String(j), label: deck?.commander ?? P[src.player_id]?.name ?? '?' },
+            ...(deck?.partner ? [{ key: `${j}p`, label: deck.partner }] : []),
+          ]
+          return (
+            <div key={j} className="cmd-src line">
+              {sources.length > 1 && (
+                <div className="row small muted">
+                  <Avatar p={P[src.player_id]} size={18} /> {P[src.player_id]?.name}
+                </div>
+              )}
+              {sources.map(({ key, label }) => (
+                <div key={key} className="row between cmd-row">
+                  <span className="row grow">
+                    {sources.length === 1 && <Avatar p={P[src.player_id]} size={22} />}
+                    <span className="small">{label}</span>
+                  </span>
+                  <Stepper
+                    value={seat.cmd[key] ?? 0}
+                    step={[1, 5]}
+                    danger={(seat.cmd[key] ?? 0) >= 21}
+                    onChange={(d) =>
+                      change((s) => {
+                        const cur = s.cmd[key] ?? 0
+                        const nv = Math.max(0, cur + d)
+                        return { ...s, cmd: { ...s.cmd, [key]: nv }, life: s.life - (nv - cur) }
+                      })
+                    }
+                  />
+                </div>
+              ))}
             </div>
-          ),
-        )}
+          )
+        })}
         <h3>Segnalini veleno</h3>
         <div className="row between line">
           <span className="row">

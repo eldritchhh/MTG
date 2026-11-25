@@ -16,6 +16,7 @@ const P: Record<string, string> = {
   chevron: 'M9 5l7 7-7 7',
   back: 'M15 5l-7 7 7 7',
   x: 'M6 6l12 12M18 6L6 18',
+  dice: 'M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3zM8 8h.01M16 8h.01M12 12h.01M8 16h.01M16 16h.01',
   external: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
   check: 'M5 12.5l4.5 4.5L19 7',
   play: 'M7 4.5v15l12-7.5-12-7.5z',

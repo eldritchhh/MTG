@@ -305,6 +305,9 @@ textarea { resize: vertical; }
 .mini { padding: 0.32rem 0.65rem; font-size: 0.82rem; font-weight: 700; background: #000000a0; border-color: #ffffff1c; backdrop-filter: blur(6px); border-radius: 999px; }
 .mini.counters { flex: 1; max-width: 120px; gap: 4px; color: #ddd; }
 .stepper { display: inline-flex; align-items: center; gap: 6px; }
+.cmd-src { display: flex; flex-direction: column; gap: 6px; }
+.cmd-row { flex-wrap: wrap; row-gap: 6px; }
+.cmd-row > .grow { min-width: 110px; }
 .stepper button { min-width: 42px; height: 38px; padding: 0 0.5rem; border-radius: 10px; font-weight: 700; }
 .stepper b { min-width: 34px; text-align: center; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
 
