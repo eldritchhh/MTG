@@ -84,6 +84,11 @@ create table if not exists allowed_emails (
 );
 alter table allowed_emails enable row level security;
 
+-- Accesso dell'app alle tabelle (i progetti Supabase recenti non lo danno più in automatico);
+-- cosa può vedere e modificare ciascuno lo decidono le regole RLS qui sotto e in pods.sql
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on players, tiers, decks, debts, loans, games to authenticated;
+
 -- Sicurezza: tutte le tabelle sono protette; i permessi (chi vede e modifica cosa) sono in pods.sql
 alter table players enable row level security;
 alter table decks   enable row level security;

@@ -70,12 +70,16 @@ begin
     update loans   set pod_id = p where pod_id is null;
     update games   set pod_id = p where pod_id is null;
 
-    -- tutti gli utenti già registrati entrano nel gruppo (admin chi lo era); il giocatore lo scelgono dall'app
+    -- entrano nel gruppo gli utenti che erano nella lista delle email autorizzate (admin chi lo era);
+    -- il giocatore lo scelgono dall'app al primo accesso
     insert into pod_members (pod_id, user_id, role)
-    select p, u.id, case when exists (select 1 from allowed_emails a where a.email = lower(u.email) and a.is_admin) or u.id = owner
-                         then 'admin' else 'user' end
+    select p, u.id, case when a.is_admin or u.id = owner then 'admin' else 'user' end
     from auth.users u
+    join allowed_emails a on a.email = lower(u.email)
     on conflict do nothing;
+    if owner is not null then
+      insert into pod_members (pod_id, user_id, role) values (p, owner, 'admin') on conflict do nothing;
+    end if;
   end if;
 end $$;
 
@@ -206,6 +210,16 @@ end $$;
 drop trigger if exists keep_one_admin on pod_members;
 create trigger keep_one_admin before update or delete on pod_members
 for each row execute function public.keep_one_admin();
+
+-- ---------- accesso dell'app (i progetti Supabase recenti non lo danno in automatico) ----------
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on players, tiers, decks, debts, loans, games, pods, pod_members, pod_invites to authenticated;
+grant execute on function public.is_member(uuid), public.is_pod_admin(uuid), public.my_player(uuid),
+  public.player_in_pod(uuid, uuid), public.in_game(jsonb, uuid),
+  public.create_pod(text), public.create_invite(uuid), public.join_pod(text),
+  public.claim_player(uuid, uuid, text, text) to authenticated;
+revoke execute on function public.create_pod(text), public.create_invite(uuid), public.join_pod(text),
+  public.claim_player(uuid, uuid, text, text) from anon;
 
 -- ---------- regole (Row Level Security) ----------
 alter table pods enable row level security;
