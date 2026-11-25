@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMe, useStore } from '../lib/store'
-import { cardListInfo, downloadCommanderList, getCommanderList, updateCardList } from '../lib/scryfall'
+import { cardListInfo, commanderListInfo, updateCardList, updateCommanderList } from '../lib/scryfall'
+import { APP_VERSION, isNewer, latestRelease, type Release } from '../lib/version'
 import { PLAYER_COLORS, dateIt } from '../lib/util'
 import type { Tier } from '../lib/types'
 import { isCloud, supabase } from '../lib/supabase'
@@ -62,6 +63,8 @@ export default function SettingsPage() {
         </label>
         <button onClick={() => store.reload()}>Ricarica dati</button>
       </div>
+
+      {APP_VERSION && <VersionCard />}
 
       {!isCloud && (
         <div className="card stack">
@@ -260,23 +263,72 @@ function AccessManager() {
   )
 }
 
-function CardNamesList() {
-  const [info, setInfo] = useState<{ updated: string; count: number; italian: number } | null>(null)
+function VersionCard() {
+  const [state, setState] = useState<{ release: Release | null; err?: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  async function check() {
+    setBusy(true)
+    try {
+      setState({ release: await latestRelease(true) })
+    } catch {
+      setState({ release: null, err: 'Non riesco a contattare GitHub: controlla la connessione.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+  const newer = state?.release && isNewer(state.release) ? state.release : null
+  return (
+    <div className="card stack">
+      <h2 className="section">
+        <Icon name="check" size={16} /> Versione
+      </h2>
+      <p className="muted small no-m">Installata: {APP_VERSION}</p>
+      {state?.err && <p className="small neg no-m">{state.err}</p>}
+      {state && !state.err && !newer && <p className="small no-m">È l'ultima versione.</p>}
+      {newer && (
+        <a className="button-like primary" href={newer.apk ?? newer.page} target="_blank" rel="noreferrer">
+          Scarica {newer.tag}
+        </a>
+      )}
+      <button onClick={check} disabled={busy}>
+        {busy ? 'Controllo…' : 'Controlla aggiornamenti'}
+      </button>
+    </div>
+  )
+}
+
+// Liste di Scryfall incluse nell'app: mostra cosa c'è e aggiorna solo con le novità
+function ScryfallList({
+  title,
+  icon,
+  load,
+  update,
+  describe,
+  noun,
+}: {
+  title: string
+  icon: string
+  load: () => Promise<{ updated: string; count: number; italian?: number }>
+  update: () => Promise<number>
+  describe: (i: { updated: string; count: number; italian?: number }) => string
+  noun: string
+}) {
+  const [info, setInfo] = useState<{ updated: string; count: number; italian?: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   useEffect(() => {
-    cardListInfo().then(setInfo, () => setErr('Lista carte non disponibile.'))
-  }, [])
+    load().then(setInfo, () => setErr('Lista non disponibile.'))
+  }, [load])
 
-  async function update() {
+  async function run() {
     setErr(null)
     setMsg(null)
     setBusy(true)
     try {
-      const n = await updateCardList()
-      setInfo(await cardListInfo())
-      setMsg(n ? `Aggiunte ${n} carte o traduzioni nuove.` : 'Nessuna carta nuova: la lista è già aggiornata.')
+      const n = await update()
+      setInfo(await load())
+      setMsg(n ? `Aggiunti ${n} nuovi.` : 'Nessuna novità: la lista è già aggiornata.')
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Aggiornamento non riuscito. Controlla la connessione e riprova.')
     } finally {
@@ -287,63 +339,43 @@ function CardNamesList() {
   return (
     <div className="card stack">
       <h2 className="section">
-        <Icon name="swap" size={16} /> Lista carte (scambi)
+        <Icon name={icon} size={16} /> {title}
       </h2>
-      <p className="muted small">
-        {info
-          ? `${info.count.toLocaleString('it-IT')} carte, ${info.italian.toLocaleString('it-IT')} con il nome italiano, aggiornate al ${dateIt(info.updated)}. La ricerca negli scambi funziona offline.`
-          : 'Carico la lista…'}
-      </p>
-      <p className="muted small no-m">Dopo l'uscita di un nuovo set: scarica da Scryfall solo le carte uscite dall'ultimo aggiornamento.</p>
+      <p className="muted small">{info ? describe(info) : 'Carico la lista…'}</p>
+      <p className="muted small no-m">Dopo l'uscita di un nuovo set: chiede a Scryfall solo quelli usciti dall'ultimo aggiornamento.</p>
       {msg && <p className="small no-m">{msg}</p>}
       {err && <p className="small neg no-m">{err}</p>}
-      <button onClick={update} disabled={busy || !info}>
-        {busy ? 'Cerco carte nuove…' : 'Cerca carte nuove su Scryfall'}
+      <button onClick={run} disabled={busy || !info}>
+        {busy ? `Cerco ${noun} nuovi…` : `Cerca ${noun} nuovi su Scryfall`}
       </button>
     </div>
   )
 }
 
+const it = (n: number) => n.toLocaleString('it-IT')
+
 function CommanderList() {
-  const [list, setList] = useState(getCommanderList)
-  const [progress, setProgress] = useState<[number, number] | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-
-  async function download() {
-    setErr(null)
-    setProgress([0, 0])
-    try {
-      await downloadCommanderList((d, t) => setProgress([d, t]))
-      setList(getCommanderList())
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Download non riuscito. Controlla la connessione e riprova.')
-    } finally {
-      setProgress(null)
-    }
-  }
-
   return (
-    <div className="card stack">
-      <h2 className="section">
-        <Icon name="cards" size={16} /> Lista comandanti
-      </h2>
-      <p className="muted small">
-        {list
-          ? `${list.cards.length.toLocaleString('it-IT')} comandanti salvati su questo dispositivo, aggiornati il ${dateIt(list.updated)}. La ricerca dei mazzi usa questa lista, anche offline.`
-          : 'Non ancora scaricata: quando crei un mazzo la ricerca dei comandanti avviene online su Scryfall. Scaricala per averla più veloce e offline.'}
-      </p>
-      {progress && (
-        <div className="progress">
-          <i style={{ width: progress[1] ? `${(progress[0] / progress[1]) * 100}%` : '5%' }} />
-          <span className="small muted">
-            {progress[1] ? `${progress[0]} / ${progress[1]} · circa 20 secondi` : 'Collegamento a Scryfall…'}
-          </span>
-        </div>
-      )}
-      {err && <p className="small neg no-m">{err}</p>}
-      <button onClick={download} disabled={!!progress}>
-        {list ? 'Aggiorna lista da Scryfall' : 'Scarica lista da Scryfall'}
-      </button>
-    </div>
+    <ScryfallList
+      title="Lista comandanti"
+      icon="cards"
+      noun="comandanti"
+      load={commanderListInfo}
+      update={updateCommanderList}
+      describe={(i) => `${it(i.count)} comandanti e background, aggiornati al ${dateIt(i.updated)}. La ricerca funziona offline, anche per nome italiano.`}
+    />
+  )
+}
+
+function CardNamesList() {
+  return (
+    <ScryfallList
+      title="Lista carte (scambi)"
+      icon="swap"
+      noun="carte"
+      load={cardListInfo}
+      update={updateCardList}
+      describe={(i) => `${it(i.count)} carte, ${it(i.italian ?? 0)} con il nome italiano, aggiornate al ${dateIt(i.updated)}. La ricerca negli scambi funziona offline.`}
+    />
   )
 }

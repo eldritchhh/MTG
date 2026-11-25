@@ -51,7 +51,9 @@ button {
 }
 button:active:not(:disabled) { transform: scale(0.97); }
 button:disabled { opacity: 0.4; cursor: default; }
-button.primary {
+button.primary,
+a.button-like.primary {
+  text-decoration: none;
   background: linear-gradient(180deg, #ecca76, var(--gold) 45%, var(--gold2));
   color: #1d1504;
   border: 1px solid #f3dc9a55;
@@ -98,6 +100,8 @@ textarea { resize: vertical; }
 .tabbar button.active { color: var(--gold); background: #d9b45a17; }
 .banner { background: linear-gradient(90deg, #3b2f0c, #2b230a); color: #f0d77a; font-size: 0.78rem; padding: 7px 16px; text-align: center; border-bottom: 1px solid #d9b45a30; }
 .banner.error { background: #4a1c1c; color: #ffb3b3; }
+.banner.update { display: flex; align-items: center; gap: 8px; text-align: left; background: linear-gradient(90deg, #163322, #10261a); color: #b9f0cc; border-bottom-color: #4cc27a40; }
+.banner.update a { color: #fff; font-weight: 700; }
 
 .page-head { display: flex; align-items: flex-end; gap: 12px; padding: 4px 0 6px; }
 .page-sub { color: var(--muted); font-size: 0.85rem; margin-top: 3px; }

@@ -62,7 +62,11 @@ Da qui in poi l'APK si ricostruisce da solo a ogni push su `main`.
 5. L'admin, in **Altro → Accesso**, aggiunge l'email di ogni amico. Solo le email in lista possono
    registrarsi: gli altri ricevono "email non autorizzata". Se togli un'email, quella persona non vede più i dati.
 6. Ogni amico installa l'APK e si **registra** con l'email che hai aggiunto e una password sua.
-7. In **Altro → Chi sei?** scegli il tuo nome (dopo averlo creato in Profili), poi **Altro → Lista comandanti → Scarica**.
+7. In **Altro → Chi sei?** scegli il tuo nome (dopo averlo creato in Profili). Le liste di comandanti e carte sono
+   già nell'app; dopo l'uscita di un nuovo set, in **Altro** premi "Cerca comandanti nuovi" / "Cerca carte nuove".
+
+Quando esce una nuova versione, l'app mostra in alto un banner con il link per scaricarla (e in **Altro → Versione**
+vedi quella installata).
 
 Lascia attivo *Allow new users to sign up* su Supabase: a filtrare ci pensa la lista delle email.
 

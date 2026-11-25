@@ -9,7 +9,8 @@ Web app (installabile sul telefono) per il gruppo di Magic:
 - **Profili** – giocatori e i loro comandanti. La ricerca propone **solo comandanti** (anche partner/background) e imposta di default l'illustrazione della carta e l'identità di colore. Tag, ricerca per tag e **tier**. Con partner/background l'immagine è metà e metà. I comandanti di un giocatore si ordinano per nome, colore o tier e si filtrano per tier e colori (contiene / esatti), con i conteggi.
 - **Tier dinamici** (es. S, 1, 2) – si aggiungono, rinominano e riordinano da *Altro → Tier*. Ogni partita salva il tier che il mazzo aveva quel giorno: il filtro per tier delle statistiche usa quello, così i numeri non cambiano quando spostate un mazzo di tier.
 - **Statistiche** – vittorie e % (vinte su giocate) per mazzo, giocatore, tag e colore; storico partite; filtri per periodo (30/90 giorni) e per **tier**.
-- **Lista comandanti** – da *Altro → Lista comandanti* la scarichi da Scryfall e la aggiorni quando vuoi (es. dopo un nuovo set): la ricerca diventa istantanea e funziona offline. Senza lista, la ricerca avviene online.
+- **Liste di comandanti e carte** – incluse nell'app (generate dal file "All Cards" di Scryfall con `scripts/build-commanders.py` e `scripts/build-card-names.py`, con i nomi italiani): la ricerca è offline, anche per nome italiano. Dopo un nuovo set, da *Altro* l'app chiede a Scryfall solo le novità.
+- **Aggiornamenti** – l'app controlla l'ultima Release su GitHub e mostra un banner con il link al nuovo APK.
 - **Altro** – accesso (l'admin sceglie quali email possono registrarsi), "Chi sei?" (per vedere il tuo saldo), backup/import JSON, logout.
 
 Costo: **0 €** (GitHub Pages + Supabase piano gratuito).

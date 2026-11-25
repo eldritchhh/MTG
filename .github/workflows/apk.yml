@@ -46,10 +46,17 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          # versione mostrata nell'app = nome della Release (apk-N): serve al controllo aggiornamenti
+          VITE_APP_VERSION: apk-${{ github.run_number }}
+          VITE_GITHUB_REPO: ${{ github.repository }}
 
       - name: Progetto Android (Capacitor)
         run: |
           npx cap add android
+          # icona e splash dal logo (assets/logo.png, si rigenera con: node scripts/build-icons.mjs)
+          npx capacitor-assets generate --android \
+            --iconBackgroundColor "#0e0c14" --iconBackgroundColorDark "#0e0c14" \
+            --splashBackgroundColor "#0e0c14" --splashBackgroundColorDark "#0e0c14"
           npx cap sync android
 
       # Se hai salvato una chiave di firma nei Secrets l'APK è firmato sempre uguale

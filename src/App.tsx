@@ -11,6 +11,7 @@ import SettingsPage from './pages/Settings'
 import { Icon } from './icons'
 import { ConfirmHost } from './lib/confirm'
 import { useBack } from './lib/back'
+import { isNewer, latestRelease, type Release } from './lib/version'
 
 const TABS = [
   { id: 'game', label: 'Partita', icon: 'heart' },
@@ -44,12 +45,42 @@ export default function App() {
   )
 }
 
+// banner "nuova versione": una volta nascosto, ricompare solo per una versione ancora più nuova
+function useUpdateBanner() {
+  const [release, setRelease] = useState<Release | null>(null)
+  useEffect(() => {
+    latestRelease()
+      .then((r) => {
+        let hidden: string | null = null
+        try {
+          hidden = localStorage.getItem('mtg:update-hidden')
+        } catch {
+          /* storage non disponibile */
+        }
+        if (isNewer(r) && r!.tag !== hidden) setRelease(r)
+      })
+      .catch(() => {}) // offline o GitHub non raggiungibile: niente banner
+  }, [])
+  return {
+    release,
+    dismiss: () => {
+      try {
+        if (release) localStorage.setItem('mtg:update-hidden', release.tag)
+      } catch {
+        /* storage non disponibile */
+      }
+      setRelease(null)
+    },
+  }
+}
+
 function Shell() {
   const [tab, setTab] = useState<Tab>(() => {
     const h = location.hash.slice(1)
     return TABS.some((t) => t.id === h) ? (h as Tab) : 'game'
   })
   const { error, loading, isDemo } = useStore()
+  const update = useUpdateBanner()
   // indietro da un'altra scheda torna a Partita (da Partita l'app va in background)
   useBack(tab !== 'game' && (() => setTab('game')))
 
@@ -69,6 +100,19 @@ function Shell() {
       )}
       {!isCloud && !isDemo && <div className="banner">Modalità locale: i dati restano su questo dispositivo.</div>}
       {error && <div className="banner error">Errore: {error}</div>}
+      {update.release && (
+        <div className="banner update">
+          <span className="grow">
+            È uscita la versione <b>{update.release.tag}</b>.{' '}
+            <a href={update.release.apk ?? update.release.page} target="_blank" rel="noreferrer">
+              Scarica e installa
+            </a>
+          </span>
+          <button className="icon-btn sm" onClick={update.dismiss} aria-label="Nascondi">
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+      )}
       <main className="content">
         {loading ? (
           <div className="center muted">Caricamento…</div>

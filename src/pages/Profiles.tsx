@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import type { Deck, Player } from '../lib/types'
 import { PLAYER_COLORS, deckLabel } from '../lib/util'
-import { getCommanderList, searchCommanders, type Commander } from '../lib/scryfall'
+import { loadCommanders, searchCommanders, type Commander } from '../lib/scryfall'
 import type { Tier } from '../lib/types'
 import { Avatar, DeckArt, DeckCard, Empty, Header, MANA, Modal, Pips, Segmented, SplitArt, deckArts, manaGradient } from '../components'
 import { ask } from '../lib/confirm'
@@ -289,36 +289,34 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
   const [tags, setTags] = useState<string[]>(deck?.tags ?? [])
   const [tagInput, setTagInput] = useState('')
   const [image, setImage] = useState<string | null>(deck?.image_url ?? null)
-  // mazzi creati prima dell'immagine del partner: la recupero dalla lista comandanti, se scaricata
-  const [partnerImage, setPartnerImage] = useState<string | null>(
-    deck?.partner_image_url ?? (deck?.partner ? (getCommanderList()?.cards.find((c) => c.name === deck.partner)?.art ?? null) : null),
-  )
+  const [partnerImage, setPartnerImage] = useState<string | null>(deck?.partner_image_url ?? null)
   const [notes, setNotes] = useState(deck?.notes ?? '')
   const [active, setActive] = useState(deck?.active ?? true)
-  const [sugg, setSugg] = useState<Commander[]>([])
-  const [searching, setSearching] = useState(false)
-  const hasList = !!getCommanderList()
+  const [sugg, setSugg] = useState<(Commander & { printed?: string })[]>([])
   const [focus, setFocus] = useState<'c' | 'p' | null>(null)
+
+  // mazzi creati prima dell'immagine del partner: la recupero dalla lista comandanti
+  useEffect(() => {
+    if (!deck?.partner || deck.partner_image_url) return
+    loadCommanders()
+      .then((l) => setPartnerImage((cur) => cur ?? l.cards.find((c) => c.name === deck.partner)?.art ?? null))
+      .catch(() => {})
+  }, [deck])
 
   const query = focus === 'p' ? partner : commander
   useEffect(() => {
     if (!focus) return
-    const ac = new AbortController()
-    const t = setTimeout(
-      () => {
-        setSearching(true)
-        searchCommanders(query, { pairOnly: focus === 'p', signal: ac.signal })
-          .then(setSugg)
-          .catch(() => setSugg([]))
-          .finally(() => setSearching(false))
-      },
-      hasList ? 0 : 300,
-    )
+    let stale = false
+    const t = setTimeout(() => {
+      searchCommanders(query, { pairOnly: focus === 'p' })
+        .then((s) => !stale && setSugg(s))
+        .catch(() => !stale && setSugg([]))
+    }, 80)
     return () => {
+      stale = true
       clearTimeout(t)
-      ac.abort()
     }
-  }, [query, focus, hasList])
+  }, [query, focus])
 
   function pick(c: Commander) {
     const which = focus
@@ -369,7 +367,7 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
     <Modal title={deck ? 'Modifica comandante' : 'Nuovo comandante'} onClose={onClose}>
       <div className="stack">
         <label className="field">
-          <span>Comandante {hasList ? '' : <em className="hint">· ricerca online, scarica la lista da Altro per averla offline</em>}</span>
+          <span>Comandante</span>
           <div className="ac">
             <input
               placeholder="Es. Atraxa, Praetors' Voice"
@@ -377,7 +375,7 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
               onChange={(e) => setCommander(e.target.value)}
               onFocus={() => setFocus('c')}
             />
-            {focus === 'c' && <Suggestions items={sugg} onPick={pick} searching={searching} query={commander} />}
+            {focus === 'c' && <Suggestions items={sugg} onPick={pick} query={commander} />}
           </div>
         </label>
         <label className="field">
@@ -391,7 +389,7 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
               }}
               onFocus={() => setFocus('p')}
             />
-            {focus === 'p' && <Suggestions items={sugg} onPick={pick} searching={searching} query={partner} />}
+            {focus === 'p' && <Suggestions items={sugg} onPick={pick} query={partner} />}
           </div>
         </label>
         {previewArts.length > 0 && <SplitArt urls={previewArts} className="art preview" />}
@@ -471,16 +469,18 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
   )
 }
 
-function Suggestions({ items, onPick, searching, query }: { items: Commander[]; onPick: (c: Commander) => void; searching: boolean; query: string }) {
+function Suggestions({ items, onPick, query }: { items: (Commander & { printed?: string })[]; onPick: (c: Commander) => void; query: string }) {
   if (query.trim().length < 2) return null
-  if (!items.length)
-    return <div className="ac-list ac-empty muted small">{searching ? 'Cerco tra i comandanti…' : 'Nessun comandante trovato. Puoi comunque scrivere il nome a mano.'}</div>
+  if (!items.length) return <div className="ac-list ac-empty muted small">Nessun comandante trovato. Puoi comunque scrivere il nome a mano.</div>
   return (
     <div className="ac-list">
       {items.map((c) => (
         <button key={c.name} className="ac-item" onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(c)}>
           <span className="ac-art" style={c.art ? { backgroundImage: `url(${c.art})` } : { backgroundImage: manaGradient(c.colors, 0.8) }} />
-          <span className="grow">{c.name}</span>
+          <span className="grow">
+            {c.name}
+            {c.printed && c.printed !== c.name && <span className="muted small"> · {c.printed}</span>}
+          </span>
           <Pips colors={c.colors} size={14} />
         </button>
       ))}
