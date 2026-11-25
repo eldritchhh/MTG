@@ -1,6 +1,6 @@
 -- ============================================================
 -- MTG tra amici - schema database (Supabase / Postgres)
--- Incolla tutto in Supabase > SQL Editor > New query > Run
+-- Incolla tutto in Supabase > SQL Editor > New query > Run, poi fai lo stesso con pods.sql (gruppi e permessi)
 -- Si può rieseguire anche su un database già creato: aggiunge solo ciò che manca.
 -- ============================================================
 
@@ -73,80 +73,24 @@ alter table debts add column if not exists group_id uuid;
 alter table debts add column if not exists group_total numeric(10,2);
 alter table decks add column if not exists partner_image_url text;
 
-insert into tiers (name, color, sort_order)
-select * from (values ('S', '#e05252', 0), ('1', '#c9a227', 1), ('2', '#4f8cf0', 2)) v(name, color, sort_order)
-where not exists (select 1 from tiers);
+-- I tier di partenza (S, 1, 2) li crea ogni gruppo quando nasce (create_pod in pods.sql).
 
--- ---------- Accesso: solo email autorizzate ----------
--- Possono registrarsi solo le email in questa lista. Chi è admin la gestisce dall'app (Altro → Accesso).
--- La prima persona che si registra (o il primo utente già esistente) diventa admin.
+-- Lista di email autorizzate usata prima dei gruppi: resta solo perché pods.sql sappia chi era admin
+-- quando sposta i dati esistenti nel primo gruppo. L'app non la legge più.
 create table if not exists allowed_emails (
   email text primary key check (email = lower(email)),
   is_admin boolean not null default false,
   created_at timestamptz not null default now()
 );
-
--- utenti già registrati prima di questa lista: restano ammessi, il più vecchio diventa admin
-insert into allowed_emails (email)
-select lower(email) from auth.users where email is not null
-on conflict do nothing;
-update allowed_emails set is_admin = true
-where email = (select lower(email) from auth.users where email is not null order by created_at limit 1)
-  and not exists (select 1 from allowed_emails where is_admin);
-
-create or replace function public.is_allowed() returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (select 1 from allowed_emails where email = lower(auth.jwt() ->> 'email'))
-$$;
-
-create or replace function public.is_admin() returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (select 1 from allowed_emails where email = lower(auth.jwt() ->> 'email') and is_admin)
-$$;
-
--- blocca la registrazione di email non in lista (se la lista è vuota, il primo diventa admin)
-create or replace function public.check_allowed_email() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  if not exists (select 1 from allowed_emails) then
-    insert into allowed_emails (email, is_admin) values (lower(new.email), true);
-  elsif not exists (select 1 from allowed_emails where email = lower(new.email)) then
-    raise exception 'email non autorizzata';
-  end if;
-  return new;
-end $$;
-
-drop trigger if exists check_allowed_email on auth.users;
-create trigger check_allowed_email before insert on auth.users
-for each row execute function public.check_allowed_email();
-
 alter table allowed_emails enable row level security;
-drop policy if exists "allowed_read" on allowed_emails;
-drop policy if exists "allowed_insert" on allowed_emails;
-drop policy if exists "allowed_update" on allowed_emails;
-drop policy if exists "allowed_delete" on allowed_emails;
-create policy "allowed_read" on allowed_emails for select to authenticated using ((select public.is_allowed()));
-create policy "allowed_insert" on allowed_emails for insert to authenticated with check ((select public.is_admin()));
-create policy "allowed_update" on allowed_emails for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
-create policy "allowed_delete" on allowed_emails for delete to authenticated using ((select public.is_admin()));
 
--- Sicurezza: solo utenti loggati E con email autorizzata leggono/scrivono
--- (se togli un'email dalla lista, quella persona non vede più i dati)
+-- Sicurezza: tutte le tabelle sono protette; i permessi (chi vede e modifica cosa) sono in pods.sql
 alter table players enable row level security;
 alter table decks   enable row level security;
 alter table debts   enable row level security;
 alter table loans   enable row level security;
 alter table games   enable row level security;
 alter table tiers   enable row level security;
-
-do $$
-declare t text;
-begin
-  foreach t in array array['players','decks','debts','loans','games','tiers'] loop
-    execute format('drop policy if exists "amici_all" on %I', t);
-    execute format('create policy "amici_all" on %I for all to authenticated using ((select public.is_allowed())) with check ((select public.is_allowed()))', t);
-  end loop;
-end $$;
 
 -- Sincronizzazione in tempo reale tra i telefoni
 do $$
