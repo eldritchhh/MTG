@@ -12,6 +12,8 @@ import { Icon } from './icons'
 import { ConfirmHost } from './lib/confirm'
 import { useBack } from './lib/back'
 import { isNewer, latestRelease, type Release } from './lib/version'
+import { PodProvider, usePodRequired } from './lib/pod'
+import { ChoosePlayer, GateScreen, GroupStart } from './pages/Onboarding'
 
 const TABS = [
   { id: 'game', label: 'Partita', icon: 'heart' },
@@ -38,8 +40,38 @@ export default function App() {
 
   if (!ready) return <div className="center muted">Caricamento…</div>
   if (isCloud && !session) return <Login />
+  if (!isCloud)
+    return (
+      <StoreProvider>
+        <Shell />
+      </StoreProvider>
+    )
   return (
-    <StoreProvider>
+    <PodProvider key={session!.user.id} userId={session!.user.id}>
+      <PodGate />
+    </PodProvider>
+  )
+}
+
+// con Supabase: prima un gruppo, poi "chi sei?", poi l'app sul gruppo aperto
+function PodGate() {
+  const pod = usePodRequired()
+  if (pod.loading) return <div className="center muted">Caricamento…</div>
+  if (pod.error) return <div className="center muted">Errore: {pod.error}</div>
+  if (!pod.current)
+    return (
+      <GateScreen title="Benvenuto">
+        <GroupStart />
+      </GateScreen>
+    )
+  if (!pod.current.player_id)
+    return (
+      <GateScreen title={pod.current.name}>
+        <ChoosePlayer />
+      </GateScreen>
+    )
+  return (
+    <StoreProvider key={pod.current.pod_id} podId={pod.current.pod_id}>
       <Shell />
     </StoreProvider>
   )

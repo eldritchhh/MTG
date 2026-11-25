@@ -15,8 +15,7 @@ export default function Login() {
     const fn = mode === 'in' ? supabase!.auth.signInWithPassword : supabase!.auth.signUp
     const { data, error } = await fn.call(supabase!.auth, { email, password })
     setBusy(false)
-    // il trigger su Supabase rifiuta le email non in lista: GoTrue lo riporta come errore generico del database
-    if (error) setMsg(mode === 'up' && /database error/i.test(error.message) ? "Questa email non è autorizzata: chiedi all'admin del gruppo di aggiungerla." : error.message)
+    if (error) setMsg(error.message)
     else if (mode === 'up' && !data.session) setMsg('Controlla la mail per confermare la registrazione.')
   }
 

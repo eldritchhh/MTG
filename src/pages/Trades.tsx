@@ -6,6 +6,7 @@ import { byId, dateIt, eur, netBalances, playerName, settlements } from '../lib/
 import { Avatar, Empty, Header, Modal, PlayerSelect, Segmented } from '../components'
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
+import { usePerms } from '../lib/pod'
 
 export default function TradesPage() {
   const [sub, setSub] = useState<'money' | 'cards'>('money')
@@ -31,7 +32,10 @@ function Money() {
   const [me] = useMe()
   const [form, setForm] = useState<Entry | 'new' | null>(null)
   const [showSettled, setShowSettled] = useState(false)
+  const perms = usePerms()
   const P = byId(players)
+  // modificare una spesa = riscriverne tutte le righe: serve essere coinvolti in ognuna (chi ha pagato) o admin
+  const canEdit = (e: Entry) => e.rows.every((r) => perms.involved(r.debtor_id, r.creditor_id))
 
   const bal = useMemo(() => netBalances(debts), [debts])
   const plan = useMemo(() => settlements(bal), [bal])
@@ -82,9 +86,11 @@ function Money() {
                 <span>
                   <b>{P[s.from]?.name}</b> → <b>{P[s.to]?.name}</b> {eur(s.amount)}
                 </span>
-                <button className="small-btn" onClick={() => settlePair(s.from, s.to, s.amount)}>
-                  Pagato
-                </button>
+                {perms.involved(s.from, s.to) && (
+                  <button className="small-btn" onClick={() => settlePair(s.from, s.to, s.amount)}>
+                    Pagato
+                  </button>
+                )}
               </div>
             ))}
           </>
@@ -104,7 +110,7 @@ function Money() {
       <div className="list">
         {entries.map((e) =>
           e.rows.length === 1 && !e.rows[0].group_id ? (
-            <button key={e.key} className={`list-item ${e.rows[0].settled ? 'done' : ''}`} onClick={() => setForm(e)}>
+            <button key={e.key} className={`list-item ${e.rows[0].settled ? 'done' : ''}`} onClick={() => setForm(e)} disabled={!canEdit(e)}>
               <div className="grow">
                 <div>
                   <b>{playerName(P, e.rows[0].debtor_id)}</b> deve a <b>{playerName(P, e.rows[0].creditor_id)}</b>
@@ -116,7 +122,7 @@ function Money() {
               <div className="strong">{eur(e.rows[0].amount)}</div>
             </button>
           ) : (
-            <button key={e.key} className={`list-item group-item ${e.rows.every((r) => r.settled) ? 'done' : ''}`} onClick={() => setForm(e)}>
+            <button key={e.key} className={`list-item group-item ${e.rows.every((r) => r.settled) ? 'done' : ''}`} onClick={() => setForm(e)} disabled={!canEdit(e)}>
               <div className="grow stack-sm">
                 <div className="row between">
                   <span>
@@ -172,6 +178,7 @@ const parseEur = (s: string) => Number(s.replace(',', '.').trim())
 function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
   const { players, add, update, remove } = useStore()
   const [me] = useMe()
+  const perms = usePerms()
   const first = entry?.rows[0]
   const isGroup = !!first?.group_id
   const [mode, setMode] = useState<'single' | 'split'>(entry ? (isGroup ? 'split' : 'single') : 'split')
@@ -200,8 +207,10 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
   const diff = Math.round((tot - assigned) * 100) / 100
 
   const amt = parseEur(amount)
-  const validSingle = debtor && creditor && debtor !== creditor && amt > 0
-  const validSplit = payer && tot > 0 && part.some((id) => id !== payer) && (!custom || Math.abs(diff) < 0.005)
+  // chi non è admin registra solo movimenti in cui è coinvolto (nelle spese divise: quelle che ha pagato lui)
+  const allowed = mode === 'single' ? perms.involved(debtor, creditor) : perms.involved(payer)
+  const validSingle = debtor && creditor && debtor !== creditor && amt > 0 && allowed
+  const validSplit = payer && tot > 0 && part.some((id) => id !== payer) && (!custom || Math.abs(diff) < 0.005) && allowed
 
   function togglePart(id: string) {
     setPart((p) => (p.includes(id) ? p.filter((x) => x !== id) : players.map((x) => x.id).filter((x) => x === id || p.includes(x))))
@@ -332,6 +341,9 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
           </>
         )}
 
+        {!allowed && (mode === 'single' ? debtor && creditor : payer) && (
+          <p className="small neg no-m">{mode === 'single' ? 'Puoi registrare solo debiti in cui ci sei tu.' : 'Puoi registrare solo le spese che hai pagato tu.'}</p>
+        )}
         <button className="primary" disabled={mode === 'single' ? !validSingle : !validSplit} onClick={save}>
           Salva
         </button>
@@ -387,6 +399,7 @@ const STATUS: Record<LoanStatus, { label: string; cls: string }> = {
 function Cards() {
   const { players, loans } = useStore()
   const [me] = useMe()
+  const perms = usePerms()
   const [form, setForm] = useState<Loan | 'new' | null>(null)
   const [filter, setFilter] = useState<'open' | 'mine' | 'all'>('open')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -423,7 +436,7 @@ function Cards() {
           const open = expanded.has(l.id)
           return (
             <div key={l.id} className="list-item loan-item">
-              <button className="loan-head" onClick={() => setForm(l)}>
+              <button className="loan-head" onClick={() => setForm(l)} disabled={!perms.involved(l.lender_id, l.borrower_id)}>
                 <div className="grow">
                   <div>
                     <b>{playerName(P, l.lender_id)}</b> → <b>{playerName(P, l.borrower_id)}</b>
@@ -544,7 +557,9 @@ function LoanForm({ loan, onClose }: { loan: Loan | null; onClose: () => void })
   const [status, setStatus] = useState<LoanStatus>(loan?.status ?? 'prestito')
   const [notes, setNotes] = useState(loan?.notes ?? '')
   const [entry, setEntry] = useState<'search' | 'paste'>('search')
-  const valid = lender && borrower && lender !== borrower && cards.trim()
+  const perms = usePerms()
+  const allowed = perms.involved(lender, borrower) // chi non è admin registra solo scambi in cui dà o riceve
+  const valid = lender && borrower && lender !== borrower && cards.trim() && allowed
 
   // le due modalità lavorano sullo stesso testo (una carta per riga): si può passare dall'una all'altra
   const lines = cardLines(cards)
@@ -632,6 +647,7 @@ function LoanForm({ loan, onClose }: { loan: Loan | null; onClose: () => void })
           <span>Note</span>
           <input placeholder="Es. per il torneo di sabato" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
+        {!allowed && lender && borrower && <p className="small neg no-m">Puoi registrare solo scambi in cui dai o ricevi tu.</p>}
         <button className="primary" disabled={!valid} onClick={save}>
           Salva
         </button>

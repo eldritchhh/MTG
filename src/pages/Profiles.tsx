@@ -8,9 +8,11 @@ import { Avatar, DeckArt, DeckCard, Empty, Header, MANA, Modal, Pips, Segmented,
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
 import { useBack } from '../lib/back'
+import { usePerms } from '../lib/pod'
 
 export default function ProfilesPage() {
   const { players, decks, games } = useStore()
+  const perms = usePerms()
   const [sel, setSel] = useState<string | null>(null)
   const [editPlayer, setEditPlayer] = useState<Player | 'new' | null>(null)
   const [tagFilter, setTagFilter] = useState<string | null>(null)
@@ -28,9 +30,11 @@ export default function ProfilesPage() {
         title="Profili"
         sub={`${players.length} giocatori · ${decks.length} comandanti`}
         action={
-          <button className="primary" onClick={() => setEditPlayer('new')}>
-            <Icon name="plus" size={18} /> Giocatore
-          </button>
+          perms.admin && (
+            <button className="primary" onClick={() => setEditPlayer('new')}>
+              <Icon name="plus" size={18} /> Giocatore
+            </button>
+          )
         }
       />
 
@@ -103,6 +107,7 @@ const colorKey = (d: Deck) => `${d.colors.length}${d.colors.map((c) => WUBRG.ind
 
 function PlayerDetail({ player, onBack, allTags }: { player: Player; onBack: () => void; allTags: string[] }) {
   const { decks, games, tiers } = useStore()
+  const perms = usePerms()
   const [editDeck, setEditDeck] = useState<Deck | 'new' | null>(null)
   const [editPlayer, setEditPlayer] = useState(false)
   const [sort, setSort] = useState<SortKey>('name')
@@ -143,15 +148,19 @@ function PlayerDetail({ player, onBack, allTags }: { player: Player; onBack: () 
             {games.filter((g) => g.winner_player_id === player.id).length} vittorie
           </div>
         </div>
-        <button className="icon-btn" onClick={() => setEditPlayer(true)} aria-label="Modifica">
-          <Icon name="edit" size={17} />
-        </button>
+        {perms.player(player.id) && (
+          <button className="icon-btn" onClick={() => setEditPlayer(true)} aria-label="Modifica">
+            <Icon name="edit" size={17} />
+          </button>
+        )}
       </div>
       <div className="row between">
         <h2 className="section">Comandanti</h2>
-        <button className="primary" onClick={() => setEditDeck('new')}>
-          <Icon name="plus" size={18} /> Comandante
-        </button>
+        {perms.addDeckFor(player.id) && (
+          <button className="primary" onClick={() => setEditDeck('new')}>
+            <Icon name="plus" size={18} /> Comandante
+          </button>
+        )}
       </div>
       {mine.length === 0 && <Empty>Nessun comandante ancora.</Empty>}
       {mine.length > 1 && (
@@ -227,7 +236,7 @@ function PlayerDetail({ player, onBack, allTags }: { player: Player; onBack: () 
       {filtering && shown.length === 0 && <p className="muted small">Nessun comandante con questi filtri.</p>}
       <div className="deck-grid">
         {shown.map((d) => (
-          <DeckCard key={d.id} d={d} onClick={() => setEditDeck(d)} />
+          <DeckCard key={d.id} d={d} onClick={perms.deck(d) ? () => setEditDeck(d) : undefined} />
         ))}
       </div>
       {editDeck && (
@@ -240,6 +249,7 @@ function PlayerDetail({ player, onBack, allTags }: { player: Player; onBack: () 
 
 function PlayerForm({ player, onClose, onDeleted }: { player: Player | null; onClose: () => void; onDeleted?: () => void }) {
   const { add, update, remove, players } = useStore()
+  const perms = usePerms()
   const [name, setName] = useState(player?.name ?? '')
   const [color, setColor] = useState(player?.color ?? PLAYER_COLORS[players.length % PLAYER_COLORS.length])
 
@@ -262,7 +272,7 @@ function PlayerForm({ player, onClose, onDeleted }: { player: Player | null; onC
         <button className="primary" onClick={save}>
           Salva
         </button>
-        {player && (
+        {player && perms.admin && (
           <button
             className="danger"
             onClick={async () => {

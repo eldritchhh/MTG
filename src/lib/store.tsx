@@ -4,9 +4,10 @@ import { defaultTiers, demoData } from './demo'
 import { isCloud } from './supabase'
 import { supabase } from './supabase'
 import { TABLES, type TableName, type Tables } from './types'
+import { usePod } from './pod'
 
 type Data = { [T in TableName]: Tables[T][] }
-type NewRow<T extends TableName> = Omit<Tables[T], 'id' | 'created_at'> & Partial<Pick<Tables[T], 'id' | 'created_at'>>
+type NewRow<T extends TableName> = Omit<Tables[T], 'id' | 'created_at' | 'pod_id'> & Partial<Pick<Tables[T], 'id' | 'created_at'>>
 
 type Store = Data & {
   loading: boolean
@@ -24,15 +25,19 @@ const DEMO_VERSION = '2'
 const empty: Data = { players: [], decks: [], debts: [], loans: [], games: [], tiers: [] }
 const Ctx = createContext<Store | null>(null)
 
-export function StoreProvider({ children }: { children: ReactNode }) {
+// podId: gruppo aperto (con Supabase); in modalità locale null
+export function StoreProvider({ podId = null, children }: { podId?: string | null; children: ReactNode }) {
   const [data, setData] = useState<Data>(empty)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadTable = useCallback(async (t: TableName) => {
-    const rows = await backend.list(t)
-    setData((d) => ({ ...d, [t]: rows }))
-  }, [])
+  const loadTable = useCallback(
+    async (t: TableName) => {
+      const rows = await backend.list(t, podId)
+      setData((d) => ({ ...d, [t]: rows }))
+    },
+    [podId],
+  )
 
   const [isDemo, setIsDemo] = useState(() => !!getFlag('mtg:demo') && getFlag('mtg:demo') !== '0')
 
@@ -48,7 +53,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setFlag('mtg:me', demo.players[0].id)
         setIsDemo(true)
       }
-      const all = await Promise.all(TABLES.map((t) => backend.list(t)))
+      const all = await Promise.all(TABLES.map((t) => backend.list(t, podId)))
       setData(Object.fromEntries(TABLES.map((t, i) => [t, all[i]])) as Data)
       setError(null)
     } catch (e) {
@@ -56,7 +61,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [podId])
 
   useEffect(() => {
     reload()
@@ -64,7 +69,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     document.addEventListener('visibilitychange', onFocus)
     // realtime: quando un amico modifica qualcosa, ricarico quella tabella
     const ch = supabase
-      ?.channel('db-changes')
+      ?.channel(`db-changes-${podId ?? 'local'}`)
       .on('postgres_changes', { event: '*', schema: 'public' }, (p) => {
         if (TABLES.includes(p.table as TableName)) loadTable(p.table as TableName).catch(() => {})
       })
@@ -107,7 +112,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await reload()
       },
       async add(t, row) {
-        const full = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...row } as Tables[typeof t]
+        const full = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...row, ...(podId ? { pod_id: podId } : {}) } as Tables[typeof t]
         setData((d) => ({ ...d, [t]: [...d[t], full] }))
         try {
           await backend.insert(t, full)
@@ -133,7 +138,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [data, loading, error, reload, fail, isDemo],
+    [data, loading, error, reload, fail, isDemo, podId],
   )
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>
@@ -166,8 +171,9 @@ function msg(e: unknown) {
   return String(e)
 }
 
-// "Chi sei?" salvato sul dispositivo
+// "Chi sei?": con i gruppi è il giocatore collegato al tuo account; in modalità locale lo scegli sul dispositivo
 export function useMe(): [string | null, (id: string | null) => void] {
+  const pod = usePod()
   const [me, setMe] = useState<string | null>(() => {
     try {
       return localStorage.getItem('mtg:me')
@@ -175,6 +181,7 @@ export function useMe(): [string | null, (id: string | null) => void] {
       return null
     }
   })
+  if (pod) return [pod.current?.player_id ?? null, () => {}]
   return [
     me,
     (id) => {

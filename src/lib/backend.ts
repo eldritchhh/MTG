@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 import type { TableName, Tables } from './types'
 
 export interface Backend {
-  list<T extends TableName>(t: T): Promise<Tables[T][]>
+  list<T extends TableName>(t: T, podId?: string | null): Promise<Tables[T][]>
   insert<T extends TableName>(t: T, row: Tables[T]): Promise<void>
   update<T extends TableName>(t: T, id: string, patch: Partial<Tables[T]>): Promise<void>
   remove(t: TableName, id: string): Promise<void>
@@ -10,8 +10,11 @@ export interface Backend {
 
 // ---------- Supabase (cloud, sincronizzato) ----------
 const cloud: Backend = {
-  async list(t) {
-    const { data, error } = await supabase!.from(t).select('*').order('created_at', { ascending: true })
+  async list(t, podId) {
+    // solo il gruppo aperto (le regole del database comunque non mostrano gruppi di cui non si fa parte)
+    let q = supabase!.from(t).select('*')
+    if (podId) q = q.eq('pod_id', podId)
+    const { data, error } = await q.order('created_at', { ascending: true })
     if (error) throw error
     return (data ?? []).map((r) => normalize(t, r)) as never
   },

@@ -9,10 +9,13 @@ import { TABLES } from '../lib/types'
 import { Header, PlayerSelect } from '../components'
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
+import { usePerms } from '../lib/pod'
+import { GroupAdmin, GroupCard } from './Group'
 
 export default function SettingsPage() {
   const store = useStore()
   const [me, setMe] = useMe()
+  const perms = usePerms()
 
   function exportJson() {
     const data = Object.fromEntries(TABLES.map((t) => [t, store[t]]))
@@ -36,16 +39,20 @@ export default function SettingsPage() {
   return (
     <div className="stack">
       <Header title="Altro" sub="Impostazioni e dati" />
-      <div className="card stack">
-        <h2 className="section">
-          <Icon name="user" size={16} /> Chi sei?
-        </h2>
-        <p className="muted small">Serve per mostrarti il tuo saldo e preimpostare i moduli. Viene salvato solo su questo dispositivo.</p>
-        <PlayerSelect players={store.players} value={me ?? ''} onChange={(v) => setMe(v || null)} placeholder="Nessuno" />
-      </div>
+      {isCloud ? (
+        <GroupCard />
+      ) : (
+        <div className="card stack">
+          <h2 className="section">
+            <Icon name="user" size={16} /> Chi sei?
+          </h2>
+          <p className="muted small">Serve per mostrarti il tuo saldo e preimpostare i moduli. Viene salvato solo su questo dispositivo.</p>
+          <PlayerSelect players={store.players} value={me ?? ''} onChange={(v) => setMe(v || null)} placeholder="Nessuno" />
+        </div>
+      )}
 
-      {isCloud && <AccessManager />}
-      <TierManager />
+      {isCloud && perms.admin && <GroupAdmin />}
+      {perms.admin && <TierManager />}
       <CommanderList />
       <CardNamesList />
 
@@ -54,13 +61,15 @@ export default function SettingsPage() {
           <Icon name="cards" size={16} /> Dati
         </h2>
         <p className="muted small">
-          {isCloud ? 'Sincronizzato con Supabase: tutti gli amici vedono gli stessi dati in tempo reale.' : 'Modalità locale: i dati sono solo su questo dispositivo.'}
+          {isCloud ? 'Sincronizzato con Supabase: tutti nel gruppo vedono gli stessi dati in tempo reale.' : 'Modalità locale: i dati sono solo su questo dispositivo.'}
         </p>
         {import.meta.env.VITE_DEMO !== '1' && <button onClick={exportJson}>Esporta backup (JSON)</button>}
-        <label className="button-like">
-          Importa backup
-          <input type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
-        </label>
+        {perms.admin && (
+          <label className="button-like">
+            Importa backup
+            <input type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
+          </label>
+        )}
         <button onClick={() => store.reload()}>Ricarica dati</button>
       </div>
 
@@ -173,89 +182,6 @@ function TierManager() {
       <div className="row">
         <input id="new-tier" placeholder="Nuovo tier (es. 3, Casual)" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTier()} />
         <button className="primary" onClick={addTier} disabled={!name.trim()}>
-          Aggiungi
-        </button>
-      </div>
-    </div>
-  )
-}
-
-interface AllowedEmail {
-  email: string
-  is_admin: boolean
-}
-
-// Visibile solo all'admin: chi è in lista può registrarsi, chi viene tolto perde l'accesso ai dati
-function AccessManager() {
-  const [rows, setRows] = useState<AllowedEmail[] | null>(null)
-  const [myEmail, setMyEmail] = useState<string | null>(null)
-  const [email, setEmail] = useState('')
-  const [err, setErr] = useState<string | null>(null)
-
-  async function load() {
-    const [{ data: u }, { data, error }] = await Promise.all([
-      supabase!.auth.getUser(),
-      supabase!.from('allowed_emails').select('email, is_admin').order('created_at'),
-    ])
-    setMyEmail(u.user?.email?.toLowerCase() ?? null)
-    setRows(error ? [] : (data as AllowedEmail[]))
-  }
-  useEffect(() => {
-    load()
-  }, [])
-
-  const isAdmin = rows?.some((r) => r.email === myEmail && r.is_admin)
-  if (!isAdmin) return null
-
-  async function addEmail() {
-    const e = email.trim().toLowerCase()
-    if (!e) return
-    setErr(null)
-    const { error } = await supabase!.from('allowed_emails').insert({ email: e })
-    if (error) setErr(error.code === '23505' ? 'Email già in lista.' : error.message)
-    else setEmail('')
-    load()
-  }
-
-  async function removeEmail(e: string) {
-    if (!(await ask(`Togliere ${e}? Non potrà più registrarsi e, se ha già un account, non vedrà più i dati.`))) return
-    const { error } = await supabase!.from('allowed_emails').delete().eq('email', e)
-    if (error) setErr(error.message)
-    load()
-  }
-
-  return (
-    <div className="card stack">
-      <h2 className="section">
-        <Icon name="users" size={16} /> Accesso
-      </h2>
-      <p className="muted small">Solo queste email possono registrarsi. Aggiungi quella di un amico, poi lui si registra dall'app con la sua password.</p>
-      <div className="stack-sm">
-        {rows!.map((r) => (
-          <div key={r.email} className="row">
-            <span className="grow" style={{ overflowWrap: 'anywhere' }}>
-              {r.email}
-              {r.is_admin && <span className="muted small"> · admin</span>}
-            </span>
-            {r.email !== myEmail && (
-              <button className="icon-btn sm danger" aria-label={`Togli ${r.email}`} onClick={() => removeEmail(r.email)}>
-                <Icon name="x" size={14} />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      {err && <p className="small neg no-m">{err}</p>}
-      <div className="row">
-        <input
-          id="new-allowed-email"
-          type="email"
-          placeholder="email@amico.it"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && addEmail()}
-        />
-        <button className="primary" onClick={addEmail} disabled={!email.trim()}>
           Aggiungi
         </button>
       </div>

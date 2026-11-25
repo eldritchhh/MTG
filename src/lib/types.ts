@@ -1,9 +1,11 @@
-export type Player = { id: string; name: string; color: string; created_at: string }
+// pod_id: gruppo a cui appartiene la riga (solo con Supabase; in modalità locale manca)
+export type Player = { id: string; pod_id?: string; name: string; color: string; created_at: string }
 
-export type Tier = { id: string; name: string; color: string; sort_order: number; created_at: string }
+export type Tier = { id: string; pod_id?: string; name: string; color: string; sort_order: number; created_at: string }
 
 export type Deck = {
   id: string
+  pod_id?: string
   player_id: string
   commander: string
   partner: string | null
@@ -19,6 +21,7 @@ export type Deck = {
 
 export type Debt = {
   id: string
+  pod_id?: string
   debtor_id: string
   creditor_id: string
   amount: number
@@ -32,6 +35,7 @@ export type Debt = {
 export type LoanStatus = 'prestito' | 'definitivo' | 'restituito'
 export type Loan = {
   id: string
+  pod_id?: string
   lender_id: string
   borrower_id: string
   cards: string
@@ -50,6 +54,7 @@ export type Participant = {
 
 export type Game = {
   id: string
+  pod_id?: string
   played_at: string
   starting_life: number
   winner_player_id: string | null

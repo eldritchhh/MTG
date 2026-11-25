@@ -26,6 +26,8 @@ create table if not exists pod_members (
   joined_at timestamptz not null default now(),
   primary key (pod_id, user_id)
 );
+-- email del membro: la vede solo chi è nello stesso gruppo (serve all'admin per riconoscere chi è chi)
+alter table pod_members add column if not exists email text;
 create unique index if not exists pod_members_one_user_per_player on pod_members(player_id) where player_id is not null;
 create index if not exists pod_members_user on pod_members(user_id);
 
@@ -91,6 +93,8 @@ begin
   end loop;
 end $$;
 
+update pod_members m set email = u.email from auth.users u where u.id = m.user_id and m.email is distinct from u.email;
+
 -- registrazione libera: niente più lista di email autorizzate (chi non è in un gruppo non vede niente)
 drop trigger if exists check_allowed_email on auth.users;
 drop policy if exists "allowed_read" on allowed_emails;
@@ -137,7 +141,8 @@ begin
     raise exception 'puoi creare al massimo 5 gruppi';
   end if;
   insert into pods (name, created_by) values (btrim(p_name), auth.uid()) returning id into p;
-  insert into pod_members (pod_id, user_id, role) values (p, auth.uid(), 'admin');
+  insert into pod_members (pod_id, user_id, role, email)
+    values (p, auth.uid(), 'admin', (select email from auth.users where id = auth.uid()));
   insert into tiers (pod_id, name, color, sort_order)
     values (p, 'S', '#e05252', 0), (p, '1', '#c9a227', 1), (p, '2', '#4f8cf0', 2);
   return p;
@@ -169,7 +174,8 @@ begin
     raise exception 'codice non valido o scaduto';
   end if;
   if not exists (select 1 from pod_members where pod_id = inv.pod_id and user_id = auth.uid()) then
-    insert into pod_members (pod_id, user_id, role) values (inv.pod_id, auth.uid(), 'user');
+    insert into pod_members (pod_id, user_id, role, email)
+      values (inv.pod_id, auth.uid(), 'user', (select email from auth.users where id = auth.uid()));
     update pod_invites set uses_left = uses_left - 1 where code = inv.code;
   end if;
   return inv.pod_id;

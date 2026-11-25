@@ -5,6 +5,7 @@ import { byId, dateIt, deckLabel } from '../lib/util'
 import { Avatar, DeckArt, Empty, Header, MANA, Modal, Pips, Segmented, TierBadge } from '../components'
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
+import { usePerms } from '../lib/pod'
 
 type Row = { key: string; games: number; wins: number }
 const pct = (r: Row) => (r.games ? Math.round((r.wins / r.games) * 100) : 0)
@@ -246,6 +247,7 @@ function Table({ rows, label }: { rows: Row[]; label: (k: string) => React.React
 
 function GameDetail({ g, onClose }: { g: Game; onClose: () => void }) {
   const { players, decks, remove } = useStore()
+  const perms = usePerms()
   const P = byId(players)
   const D = byId(decks)
   const order = [...g.participants].sort((a, b) => {
@@ -276,16 +278,18 @@ function GameDetail({ g, onClose }: { g: Game; onClose: () => void }) {
           {g.duration_min ? ` · durata ${g.duration_min} min` : ''}
         </div>
         {g.notes && <p>{g.notes}</p>}
-        <button
-          className="danger"
-          onClick={async () => {
-            if (!(await ask('Eliminare questa partita dalle statistiche?'))) return
-            await remove('games', g.id)
-            onClose()
-          }}
-        >
-          Elimina partita
-        </button>
+        {perms.game(g) && (
+          <button
+            className="danger"
+            onClick={async () => {
+              if (!(await ask('Eliminare questa partita dalle statistiche?'))) return
+              await remove('games', g.id)
+              onClose()
+            }}
+          >
+            Elimina partita
+          </button>
+        )}
       </div>
     </Modal>
   )
