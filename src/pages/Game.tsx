@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useStore } from '../lib/store'
 import type { Deck, Participant, Player } from '../lib/types'
 import { byId, deckLabel } from '../lib/util'
@@ -15,7 +15,30 @@ type Seat = {
   cmd: Record<string, number> // danni ricevuti dal comandante del posto i ("2") e dal suo partner ("2p")
   eliminated_order: number | null
 }
-type Live = { startedAt: string; startingLife: number; seats: Seat[]; table: boolean }
+// Disposizioni del tavolo (il telefono sta in mezzo, i giocatori intorno):
+// sides = rettangolo, giocatori sui due lati lunghi; square = un giocatore per lato;
+// table = metà capovolta; grid = tutti dritti
+type Layout = 'sides' | 'square' | 'table' | 'grid'
+const LAYOUTS: { id: Layout; label: string }[] = [
+  { id: 'sides', label: 'Rettangolo' },
+  { id: 'square', label: '4 lati' },
+  { id: 'table', label: 'Metà capovolta' },
+  { id: 'grid', label: 'Griglia' },
+]
+type Rot = 0 | 90 | 180 | 270
+type Live = { startedAt: string; startingLife: number; seats: Seat[]; layout?: Layout; table?: boolean }
+const layoutOf = (l: Live): Layout => l.layout ?? (l.table ? 'table' : 'grid') // partite salvate prima delle disposizioni
+
+// ultima configurazione usata: alla partita successiva gli stessi giocatori sono già selezionati
+const SETUP_KEY = 'mtg:setup'
+type SavedSetup = { sel: string[]; deckOf: Record<string, string>; life: number; tier: string | null; layout: Layout }
+const loadSetup = (): Partial<SavedSetup> => {
+  try {
+    return JSON.parse(localStorage.getItem(SETUP_KEY) ?? '{}')
+  } catch {
+    return {}
+  }
+}
 
 const LIVE_KEY = 'mtg:live'
 const loadLive = (): Live | null => {
@@ -45,11 +68,16 @@ export default function GamePage() {
 // ------------------------------------------------------------ SETUP
 function Setup({ onStart }: { onStart: (l: Live) => void }) {
   const { players, decks, games, tiers } = useStore()
-  const [sel, setSel] = useState<string[]>([])
-  const [deckOf, setDeckOf] = useState<Record<string, string>>({})
-  const [life, setLife] = useState(40)
+  const [saved] = useState(loadSetup)
+  // solo giocatori, mazzi e tier che esistono ancora
+  const [sel, setSel] = useState<string[]>(() => (saved.sel ?? []).filter((id) => players.some((p) => p.id === id)))
+  const [deckOf, setDeckOf] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(saved.deckOf ?? {}).filter(([, d]) => decks.some((x) => x.id === d))),
+  )
+  const [life, setLife] = useState(saved.life ?? 40)
   const [picking, setPicking] = useState<string | null>(null)
-  const [tier, setTier] = useState<string | null>(null) // null = misto
+  const [tier, setTier] = useState<string | null>(saved.tier && tiers.some((t) => t.id === saved.tier) ? saved.tier : null) // null = misto
+  const [layout, setLayout] = useState<Layout>(saved.layout ?? 'sides')
   const [noDeck, setNoDeck] = useState<string[]>([]) // giocatori senza mazzi del tier scelto
   const P = byId(players)
   const D = byId(decks)
@@ -93,10 +121,15 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
   }
 
   function start() {
+    try {
+      localStorage.setItem(SETUP_KEY, JSON.stringify({ sel, deckOf, life, tier, layout } satisfies SavedSetup))
+    } catch {
+      /* storage non disponibile */
+    }
     onStart({
       startedAt: new Date().toISOString(),
       startingLife: life,
-      table: sel.length > 2,
+      layout,
       seats: sel.map((id) => ({ player_id: id, deck_id: deckOf[id] || null, life, poison: 0, cmd: {}, eliminated_order: null })),
     })
   }
@@ -156,9 +189,12 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
               </button>
             ))}
           </div>
-          <p className="muted small">L'ordine di selezione è l'ordine di posto al tavolo. Tocca un giocatore per cambiare mazzo.</p>
+          <p className="muted small">L'ordine di selezione è l'ordine di posto al tavolo, in senso orario. Tocca un giocatore per cambiare mazzo.</p>
         </>
       )}
+
+      <h2>Disposizione</h2>
+      <LayoutPicker value={layout} onChange={setLayout} />
       {picking && (
         <DeckPicker
           owner={picking}
@@ -277,25 +313,22 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
     setLive({ ...live, seats })
   }
 
-  const n = live.seats.length
-  const topCount = live.table ? Math.ceil(n / 2) : 0
-  const rows = live.table ? [live.seats.map((_, i) => i).slice(0, topCount), live.seats.map((_, i) => i).slice(topCount)] : null
-
-  const tile = (i: number, flipped: boolean) => (
-    <SeatTile
-      key={i}
-      idx={i}
-      seat={live.seats[i]}
-      player={P[live.seats[i].player_id]}
-      deck={D[live.seats[i].deck_id ?? '']}
-      flipped={flipped}
+  const tile = (i: number, rot: Rot) => (
+    <div className="cell" key={i}>
+      <SeatTile
+        idx={i}
+        seat={live.seats[i]}
+        player={P[live.seats[i].player_id]}
+        deck={D[live.seats[i].deck_id ?? '']}
+        rot={rot}
       moving={moving}
       onLife={(d) => change(i, (s) => ({ ...s, life: s.life + d }))}
       onOpen={() => setPanel(i)}
       onHold={() => setMoving(i)}
       onDrop={(target) => target !== null && target !== i && swap(i, target)}
-      onTapWhileMoving={() => moving !== null && swap(moving, i)}
-    />
+        onTapWhileMoving={() => moving !== null && swap(moving, i)}
+      />
+    </div>
   )
 
   return (
@@ -315,14 +348,7 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
           </button>
         )}
       </div>
-      {rows ? (
-        <div className="seats table">
-          <div className="seat-row">{rows[0].map((i) => tile(i, true))}</div>
-          <div className="seat-row">{rows[1].map((i) => tile(i, false))}</div>
-        </div>
-      ) : (
-        <div className={`seats grid n${Math.min(n, 6)}`}>{live.seats.map((_, i) => tile(i, false))}</div>
-      )}
+      <Seats layout={layoutOf(live)} n={live.seats.length} tile={tile} />
 
       {panel !== null && (
         <CounterPanel
@@ -347,14 +373,16 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
             >
               <Icon name="trophy" size={18} /> Termina e salva
             </button>
-            <button
-              onClick={() => {
-                setLive({ ...live, table: !live.table })
-                setMenu(false)
-              }}
-            >
-              {live.table ? 'Vista a griglia' : 'Vista tavolo (metà capovolta)'}
-            </button>
+            <div className="field">
+              <span>Disposizione</span>
+              <LayoutPicker
+                value={layoutOf(live)}
+                onChange={(layout) => {
+                  setLive({ ...live, layout, table: undefined })
+                  setMenu(false)
+                }}
+              />
+            </div>
             <p className="muted small no-m">Per cambiare posto: tieni premuto un giocatore e trascinalo sul nuovo posto (o rilascia e tocca il posto).</p>
             <button
               onClick={async () => {
@@ -382,16 +410,110 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
   )
 }
 
+// I posti seguono l'ordine di selezione in senso orario (visto dall'alto, telefono in verticale).
+// Ogni posto è ruotato verso chi ci siede: 0 = in basso, 90 = lato sinistro, 180 = in alto, 270 = lato destro.
+function Seats({ layout, n, tile }: { layout: Layout; n: number; tile: (i: number, rot: Rot) => ReactNode }) {
+  const all = Array.from({ length: n }, (_, i) => i)
+
+  if (layout === 'sides') {
+    // rettangolo: lato sinistro dal basso verso l'alto, poi lato destro dall'alto verso il basso
+    const nl = Math.ceil(n / 2)
+    return (
+      <div className="seats sides">
+        <div className="seat-col">{all.slice(0, nl).reverse().map((i) => tile(i, 90))}</div>
+        <div className="seat-col">{all.slice(nl).map((i) => tile(i, 270))}</div>
+      </div>
+    )
+  }
+
+  if (layout === 'square') {
+    // un posto in basso, poi lato sinistro, in alto (da 4 giocatori, o con 2), lato destro
+    const hasTop = n >= 4 || n === 2
+    const sides = n - 1 - (hasTop ? 1 : 0)
+    const nl = Math.ceil(sides / 2)
+    const left = all.slice(1, 1 + nl)
+    const top = hasTop ? 1 + nl : null
+    const right = all.slice(1 + nl + (hasTop ? 1 : 0))
+    return (
+      <div className="seats square">
+        {top !== null && <div className="sq-row">{tile(top, 180)}</div>}
+        {sides > 0 && (
+          <div className="sq-mid" style={{ flex: Math.max(left.length, right.length) > 1 ? 2.2 : 1.3 }}>
+            <div className="seat-col">{[...left].reverse().map((i) => tile(i, 90))}</div>
+            {right.length > 0 && <div className="seat-col">{right.map((i) => tile(i, 270))}</div>}
+          </div>
+        )}
+        <div className="sq-row">{tile(0, 0)}</div>
+      </div>
+    )
+  }
+
+  if (layout === 'table') {
+    const top = Math.ceil(n / 2)
+    return (
+      <div className="seats table">
+        <div className="seat-row">{all.slice(0, top).map((i) => tile(i, 180))}</div>
+        <div className="seat-row">{all.slice(top).map((i) => tile(i, 0))}</div>
+      </div>
+    )
+  }
+
+  return <div className={`seats grid n${Math.min(n, 6)}`}>{all.map((i) => tile(i, 0))}</div>
+}
+
+function LayoutPicker({ value, onChange }: { value: Layout; onChange: (l: Layout) => void }) {
+  return (
+    <div className="layout-picker">
+      {LAYOUTS.map((l) => (
+        <button key={l.id} className={value === l.id ? 'on' : ''} onClick={() => onChange(l.id)}>
+          <LayoutIcon layout={l.id} />
+          <span>{l.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// disegnino della disposizione con 4 posti (la tacca indica il lato del giocatore)
+function LayoutIcon({ layout }: { layout: Layout }) {
+  const r = (x: number, y: number, w: number, h: number, k: number) => <rect key={k} x={x} y={y} width={w} height={h} rx={2} />
+  const boxes: Record<Layout, ReactNode[]> = {
+    sides: [r(2, 2, 11, 17, 0), r(15, 2, 11, 17, 1), r(2, 21, 11, 17, 2), r(15, 21, 11, 17, 3)],
+    square: [r(6, 2, 16, 10, 0), r(2, 14, 11, 12, 1), r(15, 14, 11, 12, 2), r(6, 28, 16, 10, 3)],
+    table: [r(2, 2, 11, 17, 0), r(15, 2, 11, 17, 1), r(2, 21, 11, 17, 2), r(15, 21, 11, 17, 3)],
+    grid: [r(2, 2, 11, 17, 0), r(15, 2, 11, 17, 1), r(2, 21, 11, 17, 2), r(15, 21, 11, 17, 3)],
+  }
+  // tacche: verso dove guarda ciascun posto
+  const ticks: Record<Layout, [number, number, number, number][]> = {
+    sides: [[3, 7, 3, 14], [25, 7, 25, 14], [3, 26, 3, 33], [25, 26, 25, 33]],
+    square: [[11, 3, 17, 3], [3, 17, 3, 23], [25, 17, 25, 23], [11, 37, 17, 37]],
+    table: [[5, 3, 10, 3], [18, 3, 23, 3], [5, 37, 10, 37], [18, 37, 23, 37]],
+    grid: [[5, 18, 10, 18], [18, 18, 23, 18], [5, 37, 10, 37], [18, 37, 23, 37]],
+  }
+  return (
+    <svg viewBox="0 0 28 40" width={28} height={40} className="layout-icon">
+      <g fill="currentColor" opacity={0.25}>
+        {boxes[layout]}
+      </g>
+      <g stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+        {ticks[layout].map(([x1, y1, x2, y2], i) => (
+          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} />
+        ))}
+      </g>
+    </svg>
+  )
+}
+
 const HOLD_MS = 450
 
 function SeatTile({
-  idx, seat, player, deck, flipped, moving, onLife, onOpen, onHold, onDrop, onTapWhileMoving,
+  idx, seat, player, deck, rot, moving, onLife, onOpen, onHold, onDrop, onTapWhileMoving,
 }: {
   idx: number
   seat: Seat
   player?: Player
   deck?: Deck
-  flipped: boolean
+  rot: Rot
   moving: number | null
   onLife: (d: number) => void
   onOpen: () => void
@@ -456,7 +578,7 @@ function SeatTile({
   return (
     <div
       data-seat={idx}
-      className={`seat ${dead ? 'dead' : ''} ${flipped ? 'flipped' : ''} ${moving === idx ? 'moving' : moving !== null ? 'drop-target' : ''}`}
+      className={`seat r${rot} ${dead ? 'dead' : ''} ${moving === idx ? 'moving' : moving !== null ? 'drop-target' : ''}`}
       style={{
         ['--pc' as string]: player?.color ?? '#555',
         backgroundImage: arts.length

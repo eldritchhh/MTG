@@ -270,7 +270,21 @@ textarea { resize: vertical; }
 .seats.grid.n3, .seats.grid.n4, .seats.grid.n5, .seats.grid.n6 { grid-template-columns: 1fr 1fr; }
 .seats.table { display: flex; flex-direction: column; }
 .seat-row { flex: 1; display: flex; gap: 6px; min-height: 0; }
-.seat-row > .seat { flex: 1; }
+.seats.sides { display: flex; }
+.seats.square { display: flex; flex-direction: column; }
+.sq-row { flex: 1; display: flex; min-height: 0; }
+.sq-mid { display: flex; gap: 6px; min-height: 0; }
+.seat-col { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
+/* ogni posto sta in una cella; ruotato di 90/270 gradi scambia larghezza e altezza della cella */
+.cell { flex: 1; position: relative; min-width: 0; min-height: 0; container-type: size; }
+.cell > .seat { position: absolute; inset: 0; }
+.cell > .seat.r90,
+.cell > .seat.r270 { inset: auto; top: 50%; left: 50%; width: 100cqh; height: 100cqw; }
+.cell > .seat.r90 { transform: translate(-50%, -50%) rotate(90deg); }
+.cell > .seat.r270 { transform: translate(-50%, -50%) rotate(-90deg); }
+.layout-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.layout-picker button { flex-direction: column; gap: 6px; padding: 0.6rem 0.3rem; font-size: 0.75rem; color: var(--muted); }
+.layout-picker button.on { border-color: var(--gold); color: #f5df9c; background: linear-gradient(180deg, #3a2f12, #2a220d); }
 .seat {
   position: relative;
   border-radius: 22px;
@@ -289,7 +303,8 @@ textarea { resize: vertical; }
   transition: filter 0.3s;
 }
 .seat { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; }
-.seat.flipped { transform: rotate(180deg); }
+.seat.r180 { transform: rotate(180deg); }
+.seat { container-type: size; }
 .seat.moving { outline: 3px dashed var(--gold); outline-offset: -3px; animation: seat-pulse 1s ease-in-out infinite alternate; }
 .seat.drop-target { outline: 2px solid #ffffff40; outline-offset: -2px; }
 @keyframes seat-pulse { from { filter: brightness(1); } to { filter: brightness(1.35); } }
@@ -301,7 +316,7 @@ textarea { resize: vertical; }
 .seat-info { position: absolute; top: 12px; left: 0; right: 0; text-align: center; pointer-events: none; padding: 0 34px; z-index: 2; }
 .seat-name { font-family: var(--display); font-weight: 700; font-size: 1.05rem; color: color-mix(in srgb, var(--pc) 70%, white); text-shadow: 0 1px 6px #000; letter-spacing: 0.03em; }
 .seat-deck { font-size: 0.72rem; color: #e5dff0cc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 2px; }
-.life { font-size: clamp(3.4rem, 15vmin, 7.5rem); font-weight: 800; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; pointer-events: none; position: relative; text-shadow: 0 4px 24px #000c; line-height: 1; }
+.life { font-size: clamp(2.6rem, 34cqmin, 7.5rem); font-weight: 800; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; pointer-events: none; position: relative; text-shadow: 0 4px 24px #000c; line-height: 1; }
 .delta { position: absolute; left: 100%; top: 0; font-size: 1.1rem; margin-left: 6px; letter-spacing: 0; font-weight: 700; background: #000a; border-radius: 999px; padding: 1px 8px; }
 .seat.dead .life { opacity: 0.45; }
 .out-badge { position: relative; margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; background: #000c; border: 1px solid #ffffff30; border-radius: 999px; padding: 4px 10px; pointer-events: none; }
