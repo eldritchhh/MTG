@@ -1,7 +1,7 @@
 name: APK di prova (branch pods)
 
 # APK "MTG (test)" dal branch pods: altro identificativo, quindi si installa ACCANTO all'app vera,
-# e usa il database di prova (Variables dell'environment "test"). Pubblicato come pre-release test-N:
+# e usa il database di prova (Variables dell'environment "test-env"). Pubblicato come pre-release test-N:
 # non è "latest" e l'app vera non lo propone come aggiornamento.
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    environment: test
+    environment: test-env
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +39,7 @@ jobs:
       - name: Build web app (database di prova)
         run: |
           if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
-            echo "::error::Mancano VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY nelle Variables dell'environment test."
+            echo "::error::Mancano VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY nelle Variables dell'environment test-env."
             exit 1
           fi
           npm run build
