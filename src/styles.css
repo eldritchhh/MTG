@@ -485,3 +485,10 @@ button.card-link { cursor: pointer; }
 .gap-bar i { display: block; height: 100%; background: var(--gold); border-radius: 999px; }
 .static-btn { padding: 10px 12px; }
 .list-item .chip.tiny { margin-left: 6px; }
+
+/* ---------- conto carte ---------- */
+.account-item { flex-direction: column; align-items: stretch; gap: 8px; }
+.account-boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.account-box { background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 0.82rem; color: #ddd6ea; }
+.badge-new { font-size: 0.7rem; font-weight: 800; background: var(--gold); color: #1d1504; border-radius: 999px; padding: 0.1rem 0.5rem; }
+.action-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 46; width: min(94vw, 600px); display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 16px; background: #221e2df2; border: 1px solid #d9b45a55; box-shadow: 0 12px 30px #000c; backdrop-filter: blur(10px); }

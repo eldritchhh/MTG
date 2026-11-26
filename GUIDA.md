@@ -24,7 +24,7 @@ non è vuoto e il push viene rifiutato, scrivimi prima di forzare qualcosa.
 2. **New project**: nome `mtg`, scegli una password per il database (salvala), regione *Central EU (Frankfurt)*, piano **Free**.
 3. Quando il progetto è pronto: menu a sinistra **SQL Editor** → **New query** → incolla tutto il file
    [`supabase/schema.sql`](supabase/schema.sql) → **Run**. Deve dire *Success*. Poi, una alla volta e in quest'ordine,
-   [`supabase/pods.sql`](supabase/pods.sql) (gruppi e permessi) e [`supabase/trades.sql`](supabase/trades.sql) (scambi e prezzi).
+   [`supabase/pods.sql`](supabase/pods.sql) (gruppi e permessi) e [`supabase/cards.sql`](supabase/cards.sql) (conto carte, saldi e prezzi).
 4. **Authentication → Sign In / Providers → Email**: disattiva **Confirm email** (così vi registrate
    dall'app senza dover cliccare link nella mail) e salva.
 5. **Project Settings → API** (o *Data API*): copia

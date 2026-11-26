@@ -21,8 +21,8 @@ type Store = Data & {
   reload(): Promise<void>
 }
 
-const DEMO_VERSION = '3' // 3: prestiti e debiti tra due persone diventano scambi
-const empty: Data = { players: [], decks: [], debts: [], loans: [], games: [], tiers: [], trades: [], trade_lines: [] }
+const DEMO_VERSION = '4' // 4: prestiti diventano il conto carte
+const empty: Data = { players: [], decks: [], debts: [], loans: [], games: [], tiers: [], card_loans: [], settlements: [], settlement_items: [] }
 const Ctx = createContext<Store | null>(null)
 
 // podId: gruppo aperto (con Supabase); in modalità locale null
@@ -104,7 +104,7 @@ export function StoreProvider({ podId = null, children }: { podId?: string | nul
         await reload()
       },
       async clearAll() {
-        resetLocal({ players: [], decks: [], debts: [], loans: [], games: [], tiers: defaultTiers(), trades: [], trade_lines: [] })
+        resetLocal({ players: [], decks: [], debts: [], loans: [], games: [], tiers: defaultTiers(), card_loans: [], settlements: [], settlement_items: [] })
         setFlag('mtg:demo', '0')
         setFlag('mtg:me', null)
         setFlag('mtg:live', null)

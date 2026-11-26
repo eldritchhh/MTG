@@ -30,6 +30,7 @@ export type Debt = {
   settled: boolean
   group_id: string | null // spese divise tra più persone: stesse righe, stesso group_id
   group_total: number | null // totale della spesa (inclusa la quota di chi ha pagato)
+  settlement_id?: string | null // movimento creato da un saldo carte ("Saldo carte con X")
   created_at: string
 }
 
@@ -45,38 +46,55 @@ export type Loan = {
   created_at: string
 }
 
-// Scambio tra due giocatori: righe di carte (stato per riga) e di soldi
-export type Trade = {
+// Conto carte: una carta di `owner_player` che ha `holder_player`. Non è un debito.
+export type CardLoanStatus = 'open' | 'returned' | 'settled'
+export type CardLoan = {
   id: string
   pod_id?: string
-  player_a: string
+  owner_player: string
+  holder_player: string
+  name: string // nome della carta (come scritto; il prezzo usa il nome inglese)
+  quantity: number
+  note: string | null
+  added_at: string
+  added_by?: string | null // account che l'ha aggiunta (per il badge "nuove")
+  status: CardLoanStatus
+  closed_at: string | null
+  settlement_id: string | null
+  created_at: string
+}
+
+// Saldo tra due persone: l'unica vera transazione
+export type Settlement = {
+  id: string
+  pod_id?: string
+  player_a: string // chi ha fatto il saldo (dal suo punto di vista: "Tieni" / "In cambio dai")
   player_b: string
   note: string | null
+  difference_cents: number // valore tenuto da a − valore dato da a
+  difference_resolution: 'accepted' | 'money'
+  imported?: boolean
+  created_by?: string | null
   created_at: string
 }
 
-export type LineStatus = 'loan' | 'permanent' | 'returned' | 'lost'
-export type TradeLine = {
+export type SettlementItem = {
   id: string
   pod_id?: string
-  trade_id: string
-  from_player: string
-  to_player: string
-  kind: 'card' | 'money'
-  status: LineStatus | null // solo carte
-  name: string | null // solo carte (nome inglese o come scritto)
+  settlement_id: string
+  kind: 'kept' | 'given' | 'money'
+  loan_id: string | null // kept: riga del conto che diventa definitiva
+  from_player: string // kept: proprietario; given/money: chi dà
+  to_player: string // kept: chi la tiene; given/money: chi riceve
+  name: string | null
   quantity: number
-  value_cents: number | null // valore unitario concordato (snapshot); null = senza prezzo
+  value_cents: number | null // valore unitario congelato al saldo; null = senza prezzo
   value_source: 'scryfall' | 'manual' | 'none' | null
-  valued_at: string | null
-  returned_at: string | null
-  amount_cents: number | null // solo soldi: from_player deve dare (o ha dato) a to_player
-  counts_in_balance: boolean // soldi che entrano nei saldi "chi deve a chi"
-  settled: boolean // saldato con "Pagato"
-  linked_line_id: string | null
+  amount_cents: number | null // soldi
+  mode: 'due' | 'paid_now' | null // soldi: da pagare (entra in Soldi) o pagati ora
+  debt_id: string | null
   created_at: string
 }
-
 export type Participant = {
   player_id: string
   deck_id: string | null
@@ -104,9 +122,10 @@ export type Tables = {
   loans: Loan
   games: Game
   tiers: Tier
-  trades: Trade
-  trade_lines: TradeLine
+  card_loans: CardLoan
+  settlements: Settlement
+  settlement_items: SettlementItem
 }
 export type TableName = keyof Tables
-// in ordine di dipendenza (import backup). "loans" resta solo per i backup vecchi: i prestiti ora sono trades
-export const TABLES: TableName[] = ['players', 'tiers', 'decks', 'debts', 'loans', 'games', 'trades', 'trade_lines']
+// in ordine di dipendenza (import backup). "loans" resta solo per i backup vecchi: i prestiti ora sono card_loans
+export const TABLES: TableName[] = ['players', 'tiers', 'decks', 'settlements', 'debts', 'loans', 'games', 'card_loans', 'settlement_items']
