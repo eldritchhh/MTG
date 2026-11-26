@@ -194,7 +194,7 @@ export function TierBadge({ id, small }: { id: string | null | undefined; small?
 
 export function DeckCard({ d, owner, onClick, selected }: { d: Deck; owner?: Player; onClick?: () => void; selected?: boolean }) {
   return (
-    <button className={`deck-card ${d.active ? '' : 'retired'} ${selected ? 'selected' : ''}`} onClick={onClick} disabled={!onClick}>
+    <button className={`deck-card ${d.active && !d.hidden ? '' : 'retired'} ${selected ? 'selected' : ''}`} onClick={onClick} disabled={!onClick}>
       <div className="deck-art-wrap">
         <DeckArt d={d} />
         <TierBadge id={d.tier_id} />
@@ -204,7 +204,7 @@ export function DeckCard({ d, owner, onClick, selected }: { d: Deck; owner?: Pla
         <div className="row small">
           <Pips colors={d.colors} />
           {owner && <span className="muted">di {owner.name}</span>}
-          {!d.active && <span className="muted">· ritirato</span>}
+          {!d.active ? <span className="muted">· ritirato</span> : d.hidden && <span className="muted">· nascosto qui</span>}
         </div>
         {d.tags.length > 0 && (
           <div className="chips small">

@@ -4,30 +4,39 @@ import type { TableName, Tables } from './types'
 export interface Backend {
   list<T extends TableName>(t: T, podId?: string | null): Promise<Tables[T][]>
   insert<T extends TableName>(t: T, row: Tables[T]): Promise<void>
-  update<T extends TableName>(t: T, id: string, patch: Partial<Tables[T]>): Promise<void>
-  remove(t: TableName, id: string): Promise<void>
+  // podId: un mazzo personale compare in più gruppi; tier e "nascosto" valgono solo per quello aperto
+  update<T extends TableName>(t: T, id: string, patch: Partial<Tables[T]>, podId?: string | null): Promise<void>
+  remove(t: TableName, id: string, podId?: string | null): Promise<void>
 }
+
+// i mazzi si leggono e scrivono dalla vista pod_decks (supabase/decks.sql): giocatore e tier già del gruppo
+const src = (t: TableName) => (t === 'decks' ? 'pod_decks' : t)
 
 // ---------- Supabase (cloud, sincronizzato) ----------
 const cloud: Backend = {
   async list(t, podId) {
     // solo il gruppo aperto (le regole del database comunque non mostrano gruppi di cui non si fa parte)
-    let q = supabase!.from(t).select('*')
+    let q = supabase!.from(src(t)).select('*')
     if (podId) q = q.eq('pod_id', podId)
     const { data, error } = await q.order('created_at', { ascending: true })
     if (error) throw error
     return (data ?? []).map((r) => normalize(t, r)) as never
   },
   async insert(t, row) {
-    const { error } = await supabase!.from(t).insert(row as never)
+    const { owner_user: _o, ...r } = row as Record<string, unknown>
+    const { error } = await supabase!.from(src(t)).insert((t === 'decks' ? r : row) as never)
     if (error) throw error
   },
-  async update(t, id, patch) {
-    const { error } = await supabase!.from(t).update(patch as never).eq('id', id)
+  async update(t, id, patch, podId) {
+    let q = supabase!.from(src(t)).update(patch as never).eq('id', id)
+    if (t === 'decks' && podId) q = q.eq('pod_id', podId)
+    const { error } = await q
     if (error) throw error
   },
-  async remove(t, id) {
-    const { error } = await supabase!.from(t).delete().eq('id', id)
+  async remove(t, id, podId) {
+    let q = supabase!.from(src(t)).delete().eq('id', id)
+    if (t === 'decks' && podId) q = q.eq('pod_id', podId)
+    const { error } = await q
     if (error) throw error
   },
 }

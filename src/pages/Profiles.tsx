@@ -8,7 +8,7 @@ import { Avatar, DeckArt, DeckCard, Empty, Header, MANA, Modal, Pips, Segmented,
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
 import { useBack } from '../lib/back'
-import { useInPod, usePerms } from '../lib/pod'
+import { useInPod, usePerms, usePod } from '../lib/pod'
 import { useNav } from '../lib/nav'
 import { buzz } from '../lib/prefs'
 import { toast } from '../lib/toast'
@@ -351,7 +351,15 @@ function PlayerForm({ player, onClose, onDeleted, inPod = '' }: { player: Player
 }
 
 function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; playerId: string; allTags: string[]; onClose: () => void }) {
-  const { add, update, remove, tiers } = useStore()
+  const { add, update, remove, tiers, players } = useStore()
+  const pod = usePod()
+  const perms = usePerms()
+  // mazzo personale (legato a un account): compare in tutti i gruppi del proprietario.
+  // Solo lui lo modifica; tier e "nascosto" valgono per questo gruppo (li cambia anche l'admin)
+  const personal = !!deck?.owner_user
+  const own = !personal || deck!.owner_user === pod?.userId
+  const ownerName = players.find((p) => p.id === playerId)?.name ?? ''
+  const [hidden, setHidden] = useState(deck?.hidden ?? false)
   const [tierId, setTierId] = useState<string | null>(deck?.tier_id ?? null)
   const [commander, setCommander] = useState(deck?.commander ?? '')
   const [partner, setPartner] = useState(deck?.partner ?? '')
@@ -412,6 +420,10 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
   }
 
   async function save() {
+    if (!own) {
+      await update('decks', deck!.id, { tier_id: tierId, hidden })
+      return onClose()
+    }
     if (!commander.trim()) return
     const row = {
       player_id: playerId,
@@ -424,6 +436,7 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
       notes: notes.trim() || null,
       tier_id: tierId,
       active,
+      ...(personal ? { hidden } : {}),
     }
     if (deck) await update('decks', deck.id, row)
     else await add('decks', row)
@@ -434,99 +447,122 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
   const tagSugg = allTags.filter((t) => !tags.includes(t) && t.includes(tagInput.toLowerCase())).slice(0, 8)
 
   return (
-    <Modal title={deck ? 'Modifica comandante' : 'Nuovo comandante'} onClose={onClose}>
+    <Modal title={deck ? (own ? 'Modifica comandante' : deckLabel(deck)) : 'Nuovo comandante'} onClose={onClose}>
       <div className="stack">
-        <label className="field">
-          <span>Comandante</span>
-          <div className="ac">
-            <input
-              placeholder="Es. Atraxa, Praetors' Voice"
-              value={commander}
-              onChange={(e) => setCommander(e.target.value)}
-              onFocus={() => setFocus('c')}
-            />
-            {focus === 'c' && <Suggestions items={sugg} onPick={pick} query={commander} />}
+        {personal && (
+          <p className="small muted no-m">
+            {own
+              ? 'Mazzo personale: lo vedi in tutti i tuoi gruppi. Il tier vale solo in questo gruppo.'
+              : `Mazzo personale di ${ownerName}: può modificarlo solo chi lo possiede. Qui puoi cambiare il tier o nasconderlo in questo gruppo.`}
+          </p>
+        )}
+        <fieldset className="plain-fs stack" disabled={!own}>
+          <label className="field">
+            <span>Comandante</span>
+            <div className="ac">
+              <input
+                placeholder="Es. Atraxa, Praetors' Voice"
+                value={commander}
+                onChange={(e) => setCommander(e.target.value)}
+                onFocus={() => setFocus('c')}
+              />
+              {focus === 'c' && <Suggestions items={sugg} onPick={pick} query={commander} />}
+            </div>
+          </label>
+          <label className="field">
+            <span>Partner / Background (opzionale)</span>
+            <div className="ac">
+              <input
+                value={partner}
+                onChange={(e) => {
+                  setPartner(e.target.value)
+                  if (!e.target.value.trim()) setPartnerImage(null)
+                }}
+                onFocus={() => setFocus('p')}
+              />
+              {focus === 'p' && <Suggestions items={sugg} onPick={pick} query={partner} />}
+            </div>
+          </label>
+          {previewArts.length > 0 && <SplitArt urls={previewArts} className="art preview" />}
+          <div className="field">
+            <span>Identità di colore</span>
+            <div className="chips">
+              {'WUBRG'.split('').map((c) => (
+                <button
+                  key={c}
+                  className={`mana-btn ${colors.includes(c) ? 'on' : ''}`}
+                  style={{ background: MANA[c] }}
+                  onClick={() => setColors(colors.includes(c) ? colors.filter((x) => x !== c) : 'WUBRG'.split('').filter((x) => x === c || colors.includes(x)))}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
           </div>
-        </label>
-        <label className="field">
-          <span>Partner / Background (opzionale)</span>
-          <div className="ac">
-            <input
-              value={partner}
-              onChange={(e) => {
-                setPartner(e.target.value)
-                if (!e.target.value.trim()) setPartnerImage(null)
-              }}
-              onFocus={() => setFocus('p')}
-            />
-            {focus === 'p' && <Suggestions items={sugg} onPick={pick} query={partner} />}
-          </div>
-        </label>
-        {previewArts.length > 0 && <SplitArt urls={previewArts} className="art preview" />}
-        <div className="field">
-          <span>Identità di colore</span>
-          <div className="chips">
-            {'WUBRG'.split('').map((c) => (
-              <button
-                key={c}
-                className={`mana-btn ${colors.includes(c) ? 'on' : ''}`}
-                style={{ background: MANA[c] }}
-                onClick={() => setColors(colors.includes(c) ? colors.filter((x) => x !== c) : 'WUBRG'.split('').filter((x) => x === c || colors.includes(x)))}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-        </div>
+        </fieldset>
         <div className="field">
           <span>Tier</span>
           <TierPicker tiers={tiers} value={tierId} onChange={setTierId} />
         </div>
-        <div className="field">
-          <span>Tag</span>
-          <div className="chips">
-            {tags.map((t) => (
-              <button key={t} className="chip on" onClick={() => setTags(tags.filter((x) => x !== t))}>
-                #{t} ✕
-              </button>
-            ))}
-          </div>
-          <input
-            placeholder="aggiungi tag (es. aggro, tribale, budget) + Invio"
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault()
-                addTag(tagInput)
-              }
-            }}
-          />
-          {tagSugg.length > 0 && (
+        {personal && (own || perms.admin) && (
+          <label className="switch-row small">
+            <span className="switch">
+              <input type="checkbox" role="switch" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />
+              <i />
+            </span>
+            Nascosto in questo gruppo
+          </label>
+        )}
+        <fieldset className="plain-fs stack" disabled={!own}>
+          <div className="field">
+            <span>Tag</span>
             <div className="chips">
-              {tagSugg.map((t) => (
-                <button key={t} className="chip" onClick={() => addTag(t)}>
-                  + #{t}
+              {tags.map((t) => (
+                <button key={t} className="chip on" onClick={() => setTags(tags.filter((x) => x !== t))}>
+                  #{t} ✕
                 </button>
               ))}
             </div>
-          )}
-        </div>
-        <label className="field">
-          <span>Note</span>
-          <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Link alla lista, power level…" />
-        </label>
-        <label className="row">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Mazzo attivo
-        </label>
+            <input
+              placeholder="aggiungi tag (es. aggro, tribale, budget) + Invio"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ',') {
+                  e.preventDefault()
+                  addTag(tagInput)
+                }
+              }}
+            />
+            {tagSugg.length > 0 && (
+              <div className="chips">
+                {tagSugg.map((t) => (
+                  <button key={t} className="chip" onClick={() => addTag(t)}>
+                    + #{t}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <label className="field">
+            <span>Note</span>
+            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Link alla lista, power level…" />
+          </label>
+          <label className="row">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Mazzo attivo{personal ? ' (in tutti i gruppi)' : ''}
+          </label>
+        </fieldset>
         <button className="primary" onClick={save}>
           Salva
         </button>
-        {deck && (
+        {deck && own && (
           <button
             className="danger"
             onClick={async () => {
-              if (!(await ask('Eliminare questo comandante? Le partite giocate restano, ma senza il mazzo. Meglio "ritirarlo" togliendo "Mazzo attivo".'))) return
+              const msg = personal
+                ? 'Eliminare questo comandante da tutti i tuoi gruppi? Le partite giocate restano, ma senza il mazzo. Per non usarlo solo qui attiva "Nascosto in questo gruppo".'
+                : 'Eliminare questo comandante? Le partite giocate restano, ma senza il mazzo. Meglio "ritirarlo" togliendo "Mazzo attivo".'
+              if (!(await ask(msg))) return
               await remove('decks', deck.id)
               onClose()
             }}

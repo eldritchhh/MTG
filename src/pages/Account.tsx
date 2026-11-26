@@ -20,7 +20,7 @@ export function AccountScreen({ email, onClose }: { email: string; onClose: () =
   const [choose, setChoose] = useState(false)
   const [life, setLife] = useState(prefs.startingLife)
   const [vibration, setVibration] = useState(prefs.vibration)
-  const myDecks = decks.filter((d) => d.player_id === meId && d.active).length
+  const myDecks = decks.filter((d) => d.player_id === meId && d.active && !d.hidden).length
 
   return (
     <Screen title="Account" onClose={onClose}>
@@ -129,7 +129,7 @@ function MyStats() {
     ;(async () => {
       const [g, d] = await Promise.all([
         supabase!.from('games').select('winner_player_id, participants').in('pod_id', pod.pods.map((p) => p.pod_id)),
-        supabase!.from('decks').select('id, commander, partner').in('player_id', mine),
+        supabase!.from('pod_decks').select('id, commander, partner').in('player_id', mine),
       ])
       if (stale || g.error || d.error) return
       const ids = new Set(mine)

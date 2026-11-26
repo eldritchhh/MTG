@@ -15,8 +15,10 @@ export type Deck = {
   image_url: string | null
   partner_image_url: string | null // illustrazione del partner/background: la card mostra metà e metà
   notes: string | null
-  tier_id: string | null
-  active: boolean
+  tier_id: string | null // tier nel gruppo aperto (ogni gruppo ha i suoi)
+  active: boolean // false = ritirato (vale in tutti i gruppi)
+  owner_user?: string | null // mazzo personale: l'account che lo possiede (compare in tutti i suoi gruppi)
+  hidden?: boolean // mazzo personale nascosto nel gruppo aperto
   created_at: string
 }
 

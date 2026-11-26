@@ -71,7 +71,9 @@ export function StoreProvider({ podId = null, children }: { podId?: string | nul
     const ch = supabase
       ?.channel(`db-changes-${podId ?? 'local'}`)
       .on('postgres_changes', { event: '*', schema: 'public' }, (p) => {
-        if (TABLES.includes(p.table as TableName)) loadTable(p.table as TableName).catch(() => {})
+        // deck_pod: in quali gruppi compare un mazzo personale (e con che tier)
+        const t = (p.table === 'deck_pod' ? 'decks' : p.table) as TableName
+        if (TABLES.includes(t)) loadTable(t).catch(() => {})
       })
       .subscribe()
     return () => {
@@ -124,7 +126,7 @@ export function StoreProvider({ podId = null, children }: { podId?: string | nul
       async update(t, id, patch) {
         setData((d) => ({ ...d, [t]: (d[t] as { id: string }[]).map((r) => (r.id === id ? { ...r, ...patch } : r)) }))
         try {
-          await backend.update(t, id, patch)
+          await backend.update(t, id, patch, podId)
         } catch (e) {
           fail(e)
         }
@@ -132,7 +134,7 @@ export function StoreProvider({ podId = null, children }: { podId?: string | nul
       async remove(t, id) {
         setData((d) => ({ ...d, [t]: (d[t] as { id: string }[]).filter((r) => r.id !== id) }))
         try {
-          await backend.remove(t, id)
+          await backend.remove(t, id, podId)
         } catch (e) {
           fail(e)
         }

@@ -1,6 +1,7 @@
 -- ============================================================
 -- MTG tra amici - GRUPPI ("pod") con ruoli admin / user
 -- Da lanciare DOPO schema.sql (SQL Editor > New query > Run). Si può rieseguire.
+-- Se lo riesegui, rilancia poi anche decks.sql (qui le regole dei mazzi tornano quelle di gruppo).
 --
 -- - chiunque si registra può creare un gruppo (ne diventa admin) o entrarci con un codice invito
 -- - ogni dato (giocatori, tier, mazzi, partite, debiti, carte) appartiene a un gruppo
@@ -59,6 +60,9 @@ begin
   end loop;
 end $$;
 
+-- mazzi personali (decks.sql): non hanno gruppo e non vanno spostati nel primo gruppo
+alter table decks add column if not exists owner_user uuid references auth.users(id) on delete cascade;
+
 -- ---------- dati esistenti -> primo gruppo ----------
 do $$
 declare
@@ -67,7 +71,7 @@ declare
 begin
   if exists (select 1 from players where pod_id is null) or exists (select 1 from tiers where pod_id is null)
      or exists (select 1 from games where pod_id is null) or exists (select 1 from debts where pod_id is null)
-     or exists (select 1 from loans where pod_id is null) or exists (select 1 from decks where pod_id is null) then
+     or exists (select 1 from loans where pod_id is null) or exists (select 1 from decks where pod_id is null and owner_user is null) then
     -- admin di prima (lista email autorizzate), altrimenti il primo utente registrato
     select u.id into owner from auth.users u
       join allowed_emails a on a.email = lower(u.email) and a.is_admin
@@ -77,7 +81,7 @@ begin
     insert into pods (name, created_by) values ('Il nostro gruppo', owner) returning id into p;
     update players set pod_id = p where pod_id is null;
     update tiers   set pod_id = p where pod_id is null;
-    update decks   set pod_id = p where pod_id is null;
+    update decks   set pod_id = p where pod_id is null and owner_user is null;
     update debts   set pod_id = p where pod_id is null;
     update loans   set pod_id = p where pod_id is null;
     update games   set pod_id = p where pod_id is null;
@@ -98,7 +102,8 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['players','tiers','decks','debts','loans','games'] loop
+  -- i mazzi no: quelli personali non hanno gruppo (decks.sql)
+  foreach t in array array['players','tiers','debts','loans','games'] loop
     execute format('alter table %I alter column pod_id set not null', t);
   end loop;
 end $$;

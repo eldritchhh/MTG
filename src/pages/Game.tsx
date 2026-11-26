@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useStore } from '../lib/store'
 import type { Deck, Participant, Player } from '../lib/types'
-import { byId, deckLabel } from '../lib/util'
+import { byId, deckLabel, playable } from '../lib/util'
 import { Avatar, DeckArt, DeckCard, DeckChip, Empty, Header, Modal, Pips, SplitArt, TierBadge, deckArts, manaGradient } from '../components'
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
@@ -94,7 +94,7 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
     const next = { ...deckOf }
     const missing: string[] = []
     for (const id of sel) {
-      const pool = decks.filter((d) => d.player_id === id && d.active && (tier === null || d.tier_id === tier))
+      const pool = decks.filter((d) => d.player_id === id && playable(d) && (tier === null || d.tier_id === tier))
       if (!pool.length) {
         missing.push(id)
         continue
@@ -120,7 +120,7 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
     if (sel.includes(id)) return setSel(sel.filter((x) => x !== id))
     setSel([...sel, id])
     if (!deckOf[id]) {
-      const own = decks.filter((d) => d.player_id === id && d.active)
+      const own = decks.filter((d) => d.player_id === id && playable(d))
       const pref = lastDeck[id] && decks.some((d) => d.id === lastDeck[id]) ? lastDeck[id] : own[0]?.id
       if (pref) setDeckOf((m) => ({ ...m, [id]: pref }))
     }
@@ -260,7 +260,7 @@ function DeckPicker({ owner, value, initialTier, onPick, onClose }: { owner: str
   const P = byId(players)
   const [q, setQ] = useState('')
   const [tier, setTier] = useState<string | null>(initialTier)
-  const match = (d: Deck) => d.active && (!tier || d.tier_id === tier) && (!q.trim() || deckLabel(d).toLowerCase().includes(q.trim().toLowerCase()) || d.tags.some((t) => t.includes(q.trim().toLowerCase())))
+  const match = (d: Deck) => playable(d) && (!tier || d.tier_id === tier) && (!q.trim() || deckLabel(d).toLowerCase().includes(q.trim().toLowerCase()) || d.tags.some((t) => t.includes(q.trim().toLowerCase())))
   const own = decks.filter((d) => d.player_id === owner && match(d))
   const others = decks.filter((d) => d.player_id !== owner && match(d))
   return (

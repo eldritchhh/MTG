@@ -21,6 +21,8 @@ export const byId = <T extends { id: string }>(rows: T[]) => Object.fromEntries(
 export const playerName = (players: Record<string, Player>, id: string | null | undefined) =>
   (id && players[id]?.name) || '—'
 
+// si può scegliere in partita: non ritirato e non nascosto in questo gruppo
+export const playable = (d: Deck) => d.active && !d.hidden
 export const deckLabel = (d: Deck | undefined) => (d ? (d.partner ? `${d.commander} + ${d.partner}` : d.commander) : '—')
 
 export const PLAYER_COLORS = ['#e05252', '#4f8cf0', '#45b26b', '#c9a227', '#a35ee0', '#e0843a', '#3ab8c4', '#e05ea8']
