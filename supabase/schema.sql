@@ -72,6 +72,8 @@ alter table decks add column if not exists tier_id uuid references tiers(id) on 
 alter table debts add column if not exists group_id uuid;
 alter table debts add column if not exists group_total numeric(10,2);
 alter table decks add column if not exists partner_image_url text;
+-- giocatore "eliminato": sparisce dalle liste ma partite, debiti e scambi restano
+alter table players add column if not exists archived boolean not null default false;
 
 -- I tier di partenza (S, 1, 2) li crea ogni gruppo quando nasce (create_pod in pods.sql).
 

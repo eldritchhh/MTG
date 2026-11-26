@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMe, useStore } from '../lib/store'
-import { formatCardLine, parseCardLine, scryfallUrl, searchCards, type CardHit } from '../lib/scryfall'
+import { formatCardLine, italianOf, parseCardLine, scryfallUrl, searchCards, type CardHit } from '../lib/scryfall'
 import type { Debt, Loan, LoanStatus, Player } from '../lib/types'
 import { byId, dateIt, eur, netBalances, playerName, settlements } from '../lib/util'
 import { Avatar, Empty, Header, Modal, PlayerSelect, Segmented } from '../components'
-import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
-import { usePerms } from '../lib/pod'
+import { useInPod, usePerms } from '../lib/pod'
+import { useNav } from '../lib/nav'
+import { buzz } from '../lib/prefs'
+import { withUndo } from '../lib/toast'
 
 export default function TradesPage() {
   const [sub, setSub] = useState<'money' | 'cards'>('money')
@@ -28,11 +30,12 @@ export default function TradesPage() {
 
 // ------------------------------------------------------------ SOLDI
 function Money() {
-  const { players, debts, update, add } = useStore()
+  const { players, debts, update, add, remove } = useStore()
   const [me] = useMe()
   const [form, setForm] = useState<Entry | 'new' | null>(null)
   const [showSettled, setShowSettled] = useState(false)
   const perms = usePerms()
+  const nav = useNav()
   const P = byId(players)
   // modificare una spesa = riscriverne tutte le righe: serve essere coinvolti in ognuna (chi ha pagato) o admin
   const canEdit = (e: Entry) => e.rows.every((r) => perms.involved(r.debtor_id, r.creditor_id))
@@ -41,16 +44,27 @@ function Money() {
   const plan = useMemo(() => settlements(bal), [bal])
   const entries = useMemo(() => toEntries(debts).filter((e) => showSettled || e.rows.some((r) => !r.settled)), [debts, showSettled])
 
+  // "Pagato": si esegue subito, con "Annulla" nel messaggio (al posto della conferma)
   async function settlePair(from: string, to: string, amount: number) {
-    if (!(await ask(`Segnare che ${P[from]?.name} ha dato ${eur(amount)} a ${P[to]?.name}?`))) return
+    buzz()
+    const msg = `${P[from]?.name} ha dato ${eur(amount)} a ${P[to]?.name}`
     // se il pareggio riguarda solo loro due chiudo i debiti aperti tra i due
     const open = debts.filter((d) => !d.settled && ((d.debtor_id === from && d.creditor_id === to) || (d.debtor_id === to && d.creditor_id === from)))
     const pairNet = open.reduce((s, d) => s + (d.debtor_id === from ? d.amount : -d.amount), 0)
     if (Math.abs(pairNet - amount) < 0.005) {
-      for (const d of open) await update('debts', d.id, { settled: true })
+      await withUndo(
+        msg,
+        () => Promise.all(open.map((d) => update('debts', d.id, { settled: true }))),
+        () => Promise.all(open.map((d) => update('debts', d.id, { settled: false }))),
+      )
     } else {
       // il pareggio coinvolge più persone: registro il pagamento come movimento compensativo
-      await add('debts', { debtor_id: to, creditor_id: from, amount, description: 'Pagamento', settled: false, group_id: null, group_total: null })
+      let row: { id: string } | null = null
+      await withUndo(
+        msg,
+        async () => (row = await add('debts', { debtor_id: to, creditor_id: from, amount, description: 'Pagamento', settled: false, group_id: null, group_total: null })),
+        () => row && remove('debts', row.id),
+      )
     }
   }
 
@@ -106,7 +120,16 @@ function Money() {
       <label className="row small muted">
         <input type="checkbox" checked={showSettled} onChange={(e) => setShowSettled(e.target.checked)} /> mostra saldati
       </label>
-      {entries.length === 0 && <Empty icon="coin">{players.length < 2 ? 'Aggiungi almeno 2 giocatori in Profili.' : 'Nessun debito aperto.'}</Empty>}
+      {entries.length === 0 &&
+        (players.length < 2 ? (
+          <Empty icon="coin" action={{ label: 'Vai a Giocatori', run: () => nav.setTab('players') }}>
+            Servono almeno 2 giocatori.
+          </Empty>
+        ) : (
+          <Empty icon="coin" action={{ label: 'Aggiungi una spesa', run: () => setForm('new') }}>
+            Nessun movimento aperto.
+          </Empty>
+        ))}
       <div className="list">
         {entries.map((e) =>
           e.rows.length === 1 && !e.rows[0].group_id ? (
@@ -173,7 +196,15 @@ function splitEqual(total: number, n: number) {
   const base = Math.floor(cents / n)
   return Array.from({ length: n }, (_, i) => (base + (i < cents - base * n ? 1 : 0)) / 100)
 }
-const parseEur = (s: string) => Number(s.replace(',', '.').trim())
+// "4", "4,5", "4.50", "1.234,50": virgola o punto; vuoto o non valido = 0
+function parseEur(s: string) {
+  let t = s.replace(/[\s€]/g, '')
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.')
+  const n = Number(t)
+  return Number.isFinite(n) ? n : 0
+}
+
+type Errors = Partial<Record<'debtor' | 'creditor' | 'amount' | 'payer' | 'total' | 'part' | 'shares', string>>
 
 function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
   const { players, add, update, remove } = useStore()
@@ -209,24 +240,48 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
   const amt = parseEur(amount)
   // chi non è admin registra solo movimenti in cui è coinvolto (nelle spese divise: quelle che ha pagato lui)
   const allowed = mode === 'single' ? perms.involved(debtor, creditor) : perms.involved(payer)
-  const validSingle = debtor && creditor && debtor !== creditor && amt > 0 && allowed
-  const validSplit = payer && tot > 0 && part.some((id) => id !== payer) && (!custom || Math.abs(diff) < 0.005) && allowed
+  const [errors, setErrors] = useState<Errors>({})
+  const inPod = useInPod()
+  const active = players.filter((p) => !p.archived)
+
+  function validate(): Errors {
+    const e: Errors = {}
+    if (mode === 'single') {
+      if (!debtor) e.debtor = 'Scegli chi deve'
+      if (!creditor) e.creditor = 'Scegli a chi'
+      else if (!allowed) e.creditor = 'Puoi registrare solo debiti in cui ci sei tu'
+      if (!(amt > 0)) e.amount = "Inserisci l'importo"
+    } else {
+      if (!payer) e.payer = 'Scegli chi ha pagato'
+      else if (!allowed) e.payer = 'Puoi registrare solo le spese che hai pagato tu'
+      if (!(tot > 0)) e.total = 'Inserisci il totale'
+      if (!part.some((id) => id !== payer)) e.part = 'Scegli tra chi si divide (oltre a chi ha pagato)'
+      else if (custom && Math.abs(diff) >= 0.005) e.shares = diff > 0 ? `Mancano ${eur(diff)} da assegnare` : `Hai assegnato ${eur(-diff)} in più del totale`
+    }
+    return e
+  }
 
   function togglePart(id: string) {
     setPart((p) => (p.includes(id) ? p.filter((x) => x !== id) : players.map((x) => x.id).filter((x) => x === id || p.includes(x))))
   }
 
+  // "Salva" sempre attivo: se manca qualcosa porto al primo campo da correggere
   async function save() {
+    const e = validate()
+    setErrors(e)
+    const firstError = Object.keys(e)[0]
+    if (firstError) {
+      document.querySelector(`[data-field="${firstError}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
     // modificare una spesa = sostituire le sue righe
     if (entry) for (const r of entry.rows) await remove('debts', r.id)
     if (mode === 'single') {
-      if (!validSingle) return
       await add('debts', {
         debtor_id: debtor, creditor_id: creditor, amount: Math.round(amt * 100) / 100, description: desc.trim(),
         settled: (!isGroup && first?.settled) || false, group_id: null, group_total: null,
       })
     } else {
-      if (!validSplit) return
       const group_id = crypto.randomUUID()
       for (const id of part) {
         if (id === payer) continue
@@ -244,7 +299,7 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
   }
 
   return (
-    <Modal title={entry ? 'Modifica spesa' : 'Nuova spesa'} onClose={onClose}>
+    <Modal title={entry ? 'Modifica spesa' : `Nuova spesa${inPod}`} onClose={onClose}>
       <div className="stack">
         <Segmented
           value={mode}
@@ -261,35 +316,44 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
 
         {mode === 'single' ? (
           <>
-            <label className="field">
+            <label className={`field ${errors.debtor ? 'invalid' : ''}`} data-field="debtor">
               <span>Chi deve</span>
               <PlayerSelect players={players} value={debtor} onChange={setDebtor} exclude={creditor} />
+              {errors.debtor && <em className="field-error">{errors.debtor}</em>}
             </label>
-            <label className="field">
+            <label className={`field ${errors.creditor ? 'invalid' : ''}`} data-field="creditor">
               <span>A chi</span>
               <PlayerSelect players={players} value={creditor} onChange={setCreditor} exclude={debtor} />
+              {errors.creditor && <em className="field-error">{errors.creditor}</em>}
             </label>
-            <label className="field">
+            <label className={`field ${errors.amount ? 'invalid' : ''}`} data-field="amount">
               <span>Importo (€)</span>
-              <input inputMode="decimal" placeholder="4,00" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <input inputMode="decimal" placeholder="0,00" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              {errors.amount && <em className="field-error">{errors.amount}</em>}
             </label>
           </>
         ) : (
           <>
-            <div className="row two">
-              <label className="field grow">
-                <span>Chi ha pagato</span>
-                <PlayerSelect players={players} value={creditor} onChange={setCreditor} />
-              </label>
-              <label className="field grow">
-                <span>Totale (€)</span>
-                <input inputMode="decimal" placeholder="14,00" value={total} onChange={(e) => setTotal(e.target.value)} />
-              </label>
+            <div className={`field ${errors.payer ? 'invalid' : ''}`} data-field="payer">
+              <span>Chi ha pagato</span>
+              <div className="chips">
+                {active.map((p) => (
+                  <button key={p.id} className={`chip big ${creditor === p.id ? 'on' : ''}`} aria-pressed={creditor === p.id} onClick={() => setCreditor(p.id)}>
+                    <Avatar p={p} size={22} /> {p.name}
+                  </button>
+                ))}
+              </div>
+              {errors.payer && <em className="field-error">{errors.payer}</em>}
             </div>
-            <div className="field">
+            <label className={`field ${errors.total ? 'invalid' : ''}`} data-field="total">
+              <span>Totale (€)</span>
+              <input inputMode="decimal" placeholder="0,00" value={total} onChange={(e) => setTotal(e.target.value)} />
+              {errors.total && <em className="field-error">{errors.total}</em>}
+            </label>
+            <div className={`field ${errors.part ? 'invalid' : ''}`} data-field="part">
               <span>Tra chi si divide</span>
               <div className="chips">
-                {players.map((p) => (
+                {active.map((p) => (
                   <button key={p.id} className={`chip big ${part.includes(p.id) ? 'on' : ''}`} onClick={() => togglePart(p.id)}>
                     <Avatar p={p} size={22} /> {p.name}
                     {p.id === payer && <span className="tiny-tag">ha pagato</span>}
@@ -297,7 +361,7 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
                 ))}
               </div>
               <div className="row small muted">
-                <button className="link small" onClick={() => setPart(players.map((p) => p.id))}>
+                <button className="link small" onClick={() => setPart(active.map((p) => p.id))}>
                   Tutti
                 </button>
                 <span className="dot" />
@@ -305,6 +369,7 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
                   Nessuno
                 </button>
               </div>
+              {errors.part && <em className="field-error">{errors.part}</em>}
             </div>
             {part.length > 0 && tot > 0 && (
               <div className="card split-box">
@@ -335,16 +400,17 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
                     )}
                   </div>
                 ))}
-                {custom && Math.abs(diff) >= 0.005 && <p className={`small ${diff > 0 ? 'neg' : 'neg'}`}>{diff > 0 ? `Mancano ${eur(diff)} da assegnare` : `Hai assegnato ${eur(-diff)} in più del totale`}</p>}
+                {custom && Math.abs(diff) >= 0.005 && (
+                  <p className="small neg" data-field="shares">
+                    {diff > 0 ? `Mancano ${eur(diff)} da assegnare` : `Hai assegnato ${eur(-diff)} in più del totale`}
+                  </p>
+                )}
               </div>
             )}
           </>
         )}
 
-        {!allowed && (mode === 'single' ? debtor && creditor : payer) && (
-          <p className="small neg no-m">{mode === 'single' ? 'Puoi registrare solo debiti in cui ci sei tu.' : 'Puoi registrare solo le spese che hai pagato tu.'}</p>
-        )}
-        <button className="primary" disabled={mode === 'single' ? !validSingle : !validSplit} onClick={save}>
+        <button className="primary" onClick={save}>
           Salva
         </button>
         {entry && entry.rows.length > 1 && (
@@ -374,9 +440,13 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
           <button
             className="danger"
             onClick={async () => {
-              if (!(await ask('Eliminare questa spesa?'))) return
-              for (const r of entry.rows) await remove('debts', r.id)
+              const rows = entry.rows
               onClose()
+              await withUndo(
+                'Spesa eliminata',
+                () => Promise.all(rows.map((r) => remove('debts', r.id))),
+                () => Promise.all(rows.map(({ pod_id: _p, ...r }) => add('debts', r))),
+              )
             }}
           >
             Elimina
@@ -429,7 +499,11 @@ function Cards() {
           <Icon name="plus" size={18} /> Carte
         </button>
       </div>
-      {list.length === 0 && <Empty>Nessuna carta {filter === 'open' ? 'in prestito' : ''}.</Empty>}
+      {list.length === 0 && (
+        <Empty action={players.length >= 2 ? { label: 'Registra uno scambio', run: () => setForm('new') } : undefined}>
+          Nessuna carta {filter === 'open' ? 'in prestito' : ''}.
+        </Empty>
+      )}
       <div className="list">
         {list.map((l) => {
           const cards = cardLines(l.cards)
@@ -476,14 +550,40 @@ const toggleSet = (s: Set<string>, id: string) => {
   return n
 }
 
+// nome di una carta: il tocco apre un'anteprima (nomi IT/EN e link), non esce subito dall'app
 function CardLink({ line }: { line: string }) {
   const { qty, name } = parseCardLine(line)
+  const [open, setOpen] = useState(false)
   return (
-    <a className="card-link" href={scryfallUrl(name)} target="_blank" rel="noreferrer">
-      {qty > 1 && <b>{qty}× </b>}
-      {name}
-      <Icon name="external" size={12} />
-    </a>
+    <>
+      <button className="card-link" onClick={() => setOpen(true)}>
+        {qty > 1 && <b>{qty}× </b>}
+        {name}
+      </button>
+      {open && <CardPreview name={name} qty={qty} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+function CardPreview({ name, qty, onClose }: { name: string; qty: number; onClose: () => void }) {
+  const [it, setIt] = useState<string | undefined>()
+  useEffect(() => {
+    italianOf(name).then(setIt, () => {})
+  }, [name])
+  return (
+    <Modal title={name} onClose={onClose}>
+      <div className="stack">
+        {it && it !== name && (
+          <p className="no-m">
+            In italiano: <b>{it}</b>
+          </p>
+        )}
+        {qty > 1 && <p className="muted no-m">{qty} copie</p>}
+        <a className="button-like primary" href={scryfallUrl(name)} target="_blank" rel="noreferrer">
+          <Icon name="external" size={16} /> Apri su Scryfall
+        </a>
+      </div>
+    </Modal>
   )
 }
 
@@ -551,6 +651,7 @@ function CardSearch({ onPick }: { onPick: (name: string) => void }) {
 function LoanForm({ loan, onClose }: { loan: Loan | null; onClose: () => void }) {
   const { players, add, update, remove } = useStore()
   const [me] = useMe()
+  const inPod = useInPod()
   const [lender, setLender] = useState(loan?.lender_id ?? me ?? '')
   const [borrower, setBorrower] = useState(loan?.borrower_id ?? '')
   const [cards, setCards] = useState(loan?.cards ?? '')
@@ -584,7 +685,7 @@ function LoanForm({ loan, onClose }: { loan: Loan | null; onClose: () => void })
   }
 
   return (
-    <Modal title={loan ? 'Modifica scambio carte' : 'Nuovo scambio carte'} onClose={onClose}>
+    <Modal title={loan ? 'Modifica scambio carte' : `Nuovo scambio carte${inPod}`} onClose={onClose}>
       <div className="stack">
         <label className="field">
           <span>Chi dà le carte</span>
@@ -655,9 +756,13 @@ function LoanForm({ loan, onClose }: { loan: Loan | null; onClose: () => void })
           <button
             className="danger"
             onClick={async () => {
-              if (!(await ask('Eliminare questo scambio?'))) return
-              await remove('loans', loan.id)
               onClose()
+              const { pod_id: _p, ...row } = loan
+              await withUndo(
+                'Scambio eliminato',
+                () => remove('loans', loan.id),
+                () => add('loans', row),
+              )
             }}
           >
             Elimina

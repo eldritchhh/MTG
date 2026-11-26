@@ -8,27 +8,57 @@ import { Avatar, DeckArt, DeckCard, Empty, Header, MANA, Modal, Pips, Segmented,
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
 import { useBack } from '../lib/back'
-import { usePerms } from '../lib/pod'
+import { useInPod, usePerms } from '../lib/pod'
+import { useNav } from '../lib/nav'
+import { buzz } from '../lib/prefs'
+import { toast } from '../lib/toast'
+
+type PlayerSort = 'name' | 'wins' | 'games'
 
 export default function ProfilesPage() {
-  const { players, decks, games } = useStore()
+  const { players: allPlayers, decks, games } = useStore()
+  const players = allPlayers.filter((p) => !p.archived)
   const perms = usePerms()
-  const [sel, setSel] = useState<string | null>(null)
+  const nav = useNav()
+  const inPod = useInPod()
+  const [sel, setSel] = useState<string | null>(nav.focusPlayer)
   const [editPlayer, setEditPlayer] = useState<Player | 'new' | null>(null)
   const [tagFilter, setTagFilter] = useState<string | null>(null)
+  const [sort, setSort] = useState<PlayerSort>('name')
+
+  // "I tuoi mazzi" dall'Account apre direttamente il proprio giocatore
+  useEffect(() => {
+    if (nav.focusPlayer) {
+      setSel(nav.focusPlayer)
+      nav.clearFocus()
+    }
+  }, [nav])
 
   const player = players.find((p) => p.id === sel)
   const allTags = useMemo(() => [...new Set(decks.flatMap((d) => d.tags))].sort(), [decks])
+  const stats = useMemo(() => {
+    const m: Record<string, { games: number; wins: number }> = {}
+    for (const g of games) {
+      for (const p of g.participants) (m[p.player_id] ??= { games: 0, wins: 0 }).games++
+      if (g.winner_player_id) (m[g.winner_player_id] ??= { games: 0, wins: 0 }).wins++
+    }
+    return m
+  }, [games])
 
   if (player) return <PlayerDetail player={player} onBack={() => setSel(null)} allTags={allTags} />
 
   const filtered = tagFilter ? decks.filter((d) => d.tags.includes(tagFilter)) : null
+  const st = (id: string) => stats[id] ?? { games: 0, wins: 0 }
+  const sorted = [...players].sort((a, b) =>
+    sort === 'wins' ? st(b.id).wins - st(a.id).wins || a.name.localeCompare(b.name) : sort === 'games' ? st(b.id).games - st(a.id).games || a.name.localeCompare(b.name) : a.name.localeCompare(b.name),
+  )
+  const activeDecks = decks.filter((d) => players.some((p) => p.id === d.player_id))
 
   return (
     <div className="stack">
       <Header
-        title="Profili"
-        sub={`${players.length} giocatori · ${decks.length} comandanti`}
+        title="Giocatori"
+        sub={`${players.length} giocatori · ${activeDecks.length} comandanti`}
         action={
           perms.admin && (
             <button className="primary" onClick={() => setEditPlayer('new')}>
@@ -38,24 +68,47 @@ export default function ProfilesPage() {
         }
       />
 
-      {players.length === 0 && <Empty icon="users">Aggiungi te e i tuoi amici per iniziare.</Empty>}
+      {players.length === 0 && (
+        <Empty icon="users" action={perms.admin ? { label: 'Aggiungi un giocatore', run: () => setEditPlayer('new') } : undefined}>
+          Nessun giocatore ancora.
+        </Empty>
+      )}
+
+      {players.length > 1 && (
+        <div className="row between">
+          <span className="muted small">Ordina</span>
+          <Segmented
+            value={sort}
+            onChange={setSort}
+            options={[
+              { id: 'name', label: 'Nome' },
+              { id: 'wins', label: 'Vittorie' },
+              { id: 'games', label: 'Partite' },
+            ]}
+          />
+        </div>
+      )}
 
       <div className="list">
-        {players.map((p) => {
+        {sorted.map((p) => {
           const n = decks.filter((d) => d.player_id === p.id).length
-          const wins = games.filter((g) => g.winner_player_id === p.id).length
+          const { games: played, wins } = st(p.id)
           return (
             <button key={p.id} className="list-item player-item" style={{ ['--pc' as string]: p.color }} onClick={() => setSel(p.id)}>
               <Avatar p={p} size={44} />
               <div className="grow">
                 <div className="strong">{p.name}</div>
-                <div className="row small muted">
+                <div className="row small muted wrap">
                   <span>
-                    {n} comandant{n === 1 ? 'e' : 'i'}
+                    {played} partit{played === 1 ? 'a' : 'e'} · {played ? Math.round((wins / played) * 100) : 0}% vittorie
                   </span>
                   <span className="dot" />
                   <span className="row gap4">
                     <Icon name="trophy" size={13} /> {wins}
+                  </span>
+                  <span className="dot" />
+                  <span>
+                    {n} comandant{n === 1 ? 'e' : 'i'}
                   </span>
                 </div>
               </div>
@@ -95,7 +148,7 @@ export default function ProfilesPage() {
         </>
       )}
 
-      {editPlayer && <PlayerForm player={editPlayer === 'new' ? null : editPlayer} onClose={() => setEditPlayer(null)} />}
+      {editPlayer && <PlayerForm player={editPlayer === 'new' ? null : editPlayer} onClose={() => setEditPlayer(null)} inPod={inPod} />}
     </div>
   )
 }
@@ -137,7 +190,7 @@ function PlayerDetail({ player, onBack, allTags }: { player: Player; onBack: () 
   return (
     <div className="stack">
       <button className="link row gap4" onClick={onBack}>
-        <Icon name="back" size={16} /> Profili
+        <Icon name="back" size={16} /> Giocatori
       </button>
       <div className="profile-hero" style={{ ['--pc' as string]: player.color }}>
         <Avatar p={player} size={64} />
@@ -162,7 +215,9 @@ function PlayerDetail({ player, onBack, allTags }: { player: Player; onBack: () 
           </button>
         )}
       </div>
-      {mine.length === 0 && <Empty>Nessun comandante ancora.</Empty>}
+      {mine.length === 0 && (
+        <Empty action={perms.addDeckFor(player.id) ? { label: 'Aggiungi un comandante', run: () => setEditDeck('new') } : undefined}>Nessun comandante ancora.</Empty>
+      )}
       {mine.length > 1 && (
         <div className="card stack-sm deck-filters">
           <div className="row between">
@@ -247,8 +302,8 @@ function PlayerDetail({ player, onBack, allTags }: { player: Player; onBack: () 
   )
 }
 
-function PlayerForm({ player, onClose, onDeleted }: { player: Player | null; onClose: () => void; onDeleted?: () => void }) {
-  const { add, update, remove, players } = useStore()
+function PlayerForm({ player, onClose, onDeleted, inPod = '' }: { player: Player | null; onClose: () => void; onDeleted?: () => void; inPod?: string }) {
+  const { add, update, players } = useStore()
   const perms = usePerms()
   const [name, setName] = useState(player?.name ?? '')
   const [color, setColor] = useState(player?.color ?? PLAYER_COLORS[players.length % PLAYER_COLORS.length])
@@ -261,7 +316,7 @@ function PlayerForm({ player, onClose, onDeleted }: { player: Player | null; onC
   }
 
   return (
-    <Modal title={player ? 'Modifica giocatore' : 'Nuovo giocatore'} onClose={onClose}>
+    <Modal title={player ? 'Modifica giocatore' : `Nuovo giocatore${inPod}`} onClose={onClose}>
       <div className="stack">
         <input autoFocus placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} />
         <div className="chips">
@@ -273,17 +328,22 @@ function PlayerForm({ player, onClose, onDeleted }: { player: Player | null; onC
           Salva
         </button>
         {player && perms.admin && (
-          <button
-            className="danger"
-            onClick={async () => {
-              if (!(await ask(`Eliminare ${player.name}? Verranno eliminati anche i suoi mazzi, debiti e prestiti.`))) return
-              await remove('players', player.id)
-              onClose()
-              onDeleted?.()
-            }}
-          >
-            Elimina giocatore
-          </button>
+          <>
+            <button
+              className="danger"
+              onClick={async () => {
+                // non si cancella davvero: sparisce dalle liste, partite, debiti e scambi restano
+                await update('players', player.id, { archived: true })
+                buzz()
+                onClose()
+                onDeleted?.()
+                toast(`${player.name} eliminato dai giocatori`, { action: { label: 'Annulla', run: () => void update('players', player.id, { archived: false }) } })
+              }}
+            >
+              Elimina giocatore
+            </button>
+            <p className="muted small no-m center-text">Le sue partite, i debiti e gli scambi restano nello storico.</p>
+          </>
         )}
       </div>
     </Modal>

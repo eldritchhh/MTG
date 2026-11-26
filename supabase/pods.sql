@@ -18,6 +18,16 @@ create table if not exists pods (
   created_at timestamptz not null default now()
 );
 
+-- colore del gruppo (badge e barra in alto nell'app): a rotazione da una palette ben distinguibile sul nero
+alter table pods add column if not exists color text;
+create or replace function public.pod_color(n bigint) returns text
+language sql immutable as $$
+  select (array['#d9b45a','#4f8cf0','#45b26b','#e05252','#a35ee0','#e0843a','#3ab8c4','#e05ea8'])[1 + (n % 8)::int]
+$$;
+update pods p set color = public.pod_color(x.n)
+from (select id, row_number() over (order by created_at) - 1 as n from pods) x
+where p.id = x.id and p.color is null;
+
 create table if not exists pod_members (
   pod_id uuid not null references pods(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -140,7 +150,8 @@ begin
   if (select count(*) from pods where created_by = auth.uid()) >= 5 then
     raise exception 'puoi creare al massimo 5 gruppi';
   end if;
-  insert into pods (name, created_by) values (btrim(p_name), auth.uid()) returning id into p;
+  insert into pods (name, created_by, color)
+    values (btrim(p_name), auth.uid(), public.pod_color((select count(*) from pods))) returning id into p;
   insert into pod_members (pod_id, user_id, role, email)
     values (p, auth.uid(), 'admin', (select email from auth.users where id = auth.uid()));
   insert into tiers (pod_id, name, color, sort_order)
@@ -202,6 +213,18 @@ begin
   return pl;
 end $$;
 
+-- i miei gruppi con quello che serve al selettore: ruolo, mio giocatore, giocatori attivi, ultima partita
+create or replace function public.my_pods()
+returns table (pod_id uuid, name text, color text, role text, player_id uuid, players bigint, last_game timestamptz)
+language sql stable security definer set search_path = public as $$
+  select p.id, p.name, p.color, m.role, m.player_id,
+         (select count(*) from players pl where pl.pod_id = p.id and not pl.archived),
+         (select max(g.played_at) from games g where g.pod_id = p.id)
+  from pod_members m join pods p on p.id = m.pod_id
+  where m.user_id = auth.uid()
+  order by p.name
+$$;
+
 -- un gruppo deve sempre avere almeno un admin
 create or replace function public.keep_one_admin() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -223,7 +246,7 @@ grant select, insert, update, delete on players, tiers, decks, debts, loans, gam
 grant execute on function public.is_member(uuid), public.is_pod_admin(uuid), public.my_player(uuid),
   public.player_in_pod(uuid, uuid), public.in_game(jsonb, uuid),
   public.create_pod(text), public.create_invite(uuid), public.join_pod(text),
-  public.claim_player(uuid, uuid, text, text) to authenticated;
+  public.claim_player(uuid, uuid, text, text), public.my_pods() to authenticated;
 revoke execute on function public.create_pod(text), public.create_invite(uuid), public.join_pod(text),
   public.claim_player(uuid, uuid, text, text) from anon;
 

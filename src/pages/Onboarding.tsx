@@ -30,11 +30,11 @@ export function GroupStart({ onDone, onCancel }: { onDone?: () => void; onCancel
     <div className="stack onboarding">
       <div className="card stack">
         <h2 className="section">
-          <Icon name="plus" size={16} /> Crea un gruppo
+          <Icon name="plus" size={16} /> Crea un pod
         </h2>
         <p className="muted small no-m">Ne diventi admin: inviti gli amici con un codice e decidi chi gestisce cosa.</p>
         <div className="row">
-          <input placeholder="Nome del gruppo, es. Commander del giovedì" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && run('create')} />
+          <input placeholder="Nome del pod, es. Commander del giovedì" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && run('create')} />
           <button className="primary" disabled={!name.trim() || !!busy} onClick={() => run('create')}>
             {busy === 'create' ? '…' : 'Crea'}
           </button>
@@ -44,7 +44,7 @@ export function GroupStart({ onDone, onCancel }: { onDone?: () => void; onCancel
         <h2 className="section">
           <Icon name="users" size={16} /> Entra con un codice
         </h2>
-        <p className="muted small no-m">Chiedi il codice all'admin del gruppo (6 lettere e numeri).</p>
+        <p className="muted small no-m">Chiedi il codice all'admin del pod (6 lettere e numeri).</p>
         <div className="row">
           <input
             placeholder="Es. K7PQ2M"
@@ -102,7 +102,7 @@ export function ChoosePlayer({ onDone, onCancel }: { onDone?: () => void; onCanc
   return (
     <div className="stack onboarding">
       <p className="muted no-m">
-        Nel gruppo <b>{pod.current?.name}</b>, chi sei? Serve per i tuoi mazzi, il tuo saldo e cosa puoi modificare.
+        Nel pod <b>{pod.current?.name}</b>, chi sei? Serve per i tuoi mazzi, il tuo saldo e cosa puoi modificare.
       </p>
       {list === null && !err && <p className="muted small">Carico i giocatori…</p>}
       {free.length > 0 && (

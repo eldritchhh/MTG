@@ -4,9 +4,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
 import type { Deck, Game } from './types'
+import { toast } from './toast'
+import { buzz } from './prefs'
 
 export type Role = 'admin' | 'user'
-export type Membership = { pod_id: string; role: Role; player_id: string | null; name: string }
+export type Membership = {
+  pod_id: string
+  role: Role
+  player_id: string | null
+  name: string
+  color: string
+  players: number // giocatori attivi
+  last_game: string | null // data dell'ultima partita
+}
 export type Member = { user_id: string; email: string | null; role: Role; player_id: string | null }
 export type Invite = { code: string; expires_at: string; uses_left: number }
 
@@ -16,7 +26,7 @@ type PodState = {
   current: Membership | null
   loading: boolean
   error: string | null
-  select(podId: string): void
+  select(podId: string, announce?: boolean): void
   reload(): Promise<void>
   createPod(name: string): Promise<string>
   joinPod(code: string): Promise<string>
@@ -45,15 +55,12 @@ export function PodProvider({ userId, children }: { userId: string; children: Re
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
-    const { data, error } = await supabase!
-      .from('pod_members')
-      .select('pod_id, role, player_id, pods(name)')
-      .eq('user_id', userId)
+    const { data, error } = await supabase!.rpc('my_pods')
     if (error) setError(error.message)
     else {
       setError(null)
-      const rows = (data ?? []) as unknown as { pod_id: string; role: Role; player_id: string | null; pods: { name: string } | null }[]
-      setPods(rows.map((r) => ({ pod_id: r.pod_id, role: r.role, player_id: r.player_id, name: r.pods?.name ?? 'Gruppo' })).sort((a, b) => a.name.localeCompare(b.name)))
+      const rows = (data ?? []) as { pod_id: string; name: string; color: string | null; role: Role; player_id: string | null; players: number; last_game: string | null }[]
+      setPods(rows.map((r) => ({ ...r, color: r.color ?? '#d9b45a', players: Number(r.players) })))
     }
     setLoading(false)
   }, [userId])
@@ -73,14 +80,28 @@ export function PodProvider({ userId, children }: { userId: string; children: Re
 
   const current = pods.find((p) => p.pod_id === currentId) ?? pods[0] ?? null
 
-  const select = useCallback((podId: string) => {
-    setCurrentId(podId)
-    try {
-      localStorage.setItem(CURRENT_KEY, podId)
-    } catch {
-      /* storage non disponibile */
-    }
-  }, [])
+  // cambio del pod attivo: lo ricordo per il prossimo avvio; announce = toast "Ora sei in …"
+  const select = useCallback(
+    (podId: string, announce = false) => {
+      setCurrentId(podId)
+      try {
+        localStorage.setItem(CURRENT_KEY, podId)
+      } catch {
+        /* storage non disponibile */
+      }
+      const p = pods.find((x) => x.pod_id === podId)
+      if (announce && p) {
+        buzz()
+        toast(
+          <>
+            Ora sei in <b>{p.name}</b>
+          </>,
+          { color: p.color },
+        )
+      }
+    },
+    [pods],
+  )
 
   const value = useMemo<PodState>(
     () => ({
@@ -120,6 +141,12 @@ export function PodProvider({ userId, children }: { userId: string; children: Re
 
 // null in modalità locale (senza Supabase non ci sono gruppi)
 export const usePod = () => useContext(Ctx)
+
+// " in {pod}" per i titoli dei moduli (vuoto in modalità locale)
+export function useInPod() {
+  const p = useContext(Ctx)?.current
+  return p ? ` in ${p.name}` : ''
+}
 
 export function usePodRequired() {
   const p = useContext(Ctx)
@@ -179,10 +206,12 @@ export async function deleteInvite(code: string) {
   if (error) throw error
 }
 
-export async function renamePod(podId: string, name: string) {
-  const { error } = await supabase!.from('pods').update({ name: name.trim() }).eq('id', podId)
+export async function updatePod(podId: string, patch: { name?: string; color?: string }) {
+  const { error } = await supabase!.from('pods').update(patch).eq('id', podId)
   if (error) throw error
 }
+
+export const POD_COLORS = ['#d9b45a', '#4f8cf0', '#45b26b', '#e05252', '#a35ee0', '#e0843a', '#3ab8c4', '#e05ea8']
 
 // giocatori del gruppo e quali sono già di qualcuno (per "chi sono")
 export async function playersForClaim(podId: string) {

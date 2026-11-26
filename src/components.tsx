@@ -72,6 +72,31 @@ export function DeckChip({ d }: { d?: Deck }) {
   )
 }
 
+// quadratino arrotondato con il colore e l'iniziale del pod
+export function PodBadge({ name, color, size = 32 }: { name: string; color: string; size?: number }) {
+  return (
+    <span className="pod-badge" style={{ background: color, width: size, height: size, fontSize: size * 0.46 }}>
+      {name.trim().slice(0, 1).toUpperCase()}
+    </span>
+  )
+}
+
+// schermata a tutto schermo sopra le schede (Account, Pod), con il tasto indietro
+export function Screen({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useBack(onClose)
+  return (
+    <div className="screen">
+      <div className="screen-head">
+        <button className="icon-btn" onClick={onClose} aria-label="Indietro">
+          <Icon name="back" size={20} />
+        </button>
+        <h1 className="screen-title">{title}</h1>
+      </div>
+      <div className="screen-body stack">{children}</div>
+    </div>
+  )
+}
+
 export function Header({ title, sub, action }: { title: string; sub?: ReactNode; action?: ReactNode }) {
   return (
     <header className="page-head">
@@ -119,7 +144,7 @@ export function PlayerSelect({
     <select value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="">{placeholder}</option>
       {players
-        .filter((p) => p.id !== exclude)
+        .filter((p) => p.id !== exclude && (!p.archived || p.id === value))
         .map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}
@@ -141,11 +166,17 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
   )
 }
 
-export function Empty({ children, icon = 'cards' }: { children: ReactNode; icon?: string }) {
+// lista vuota: un messaggio e, se c'è, l'azione per riempirla
+export function Empty({ children, icon = 'cards', action }: { children: ReactNode; icon?: string; action?: { label: string; run: () => void } }) {
   return (
     <div className="empty">
       <Icon name={icon} size={32} />
       <div>{children}</div>
+      {action && (
+        <button className="primary" onClick={action.run}>
+          {action.label}
+        </button>
+      )}
     </div>
   )
 }

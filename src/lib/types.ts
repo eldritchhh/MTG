@@ -1,5 +1,6 @@
 // pod_id: gruppo a cui appartiene la riga (solo con Supabase; in modalità locale manca)
-export type Player = { id: string; pod_id?: string; name: string; color: string; created_at: string }
+// archived: giocatore "eliminato" (non compare nelle liste, ma partite, debiti e scambi restano)
+export type Player = { id: string; pod_id?: string; name: string; color: string; archived?: boolean; created_at: string }
 
 export type Tier = { id: string; pod_id?: string; name: string; color: string; sort_order: number; created_at: string }
 

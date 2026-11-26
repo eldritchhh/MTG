@@ -3,7 +3,8 @@ import { useStore } from '../lib/store'
 import type { Game } from '../lib/types'
 import { byId, dateIt, deckLabel } from '../lib/util'
 import { Avatar, DeckArt, Empty, Header, MANA, Modal, Pips, Segmented, TierBadge } from '../components'
-import { ask } from '../lib/confirm'
+import { withUndo } from '../lib/toast'
+import { useNav } from '../lib/nav'
 import { Icon } from '../icons'
 import { usePerms } from '../lib/pod'
 
@@ -12,6 +13,7 @@ const pct = (r: Row) => (r.games ? Math.round((r.wins / r.games) * 100) : 0)
 
 export default function StatsPage() {
   const { games, players, decks, tiers } = useStore()
+  const nav = useNav()
   const [view, setView] = useState<'decks' | 'players' | 'tags' | 'history'>('decks')
   const [tier, setTier] = useState<string | null>(null)
   const sortedTiers = [...tiers].sort((a, b) => a.sort_order - b.sort_order)
@@ -110,8 +112,8 @@ export default function StatsPage() {
       </div>
 
       {gs.length === 0 ? (
-        <Empty icon="chart">
-          {tier ? 'Nessuna partita con mazzi di questo tier nel periodo scelto.' : 'Ancora nessuna partita salvata. Gioca dalla scheda Partita e premi "Termina e salva".'}
+        <Empty icon="chart" action={tier ? undefined : { label: 'Inizia la prima partita', run: () => nav.setTab('game') }}>
+          {tier ? 'Nessuna partita con mazzi di questo tier nel periodo scelto.' : 'Nessuna partita ancora.'}
         </Empty>
       ) : (
         <>
@@ -246,7 +248,7 @@ function Table({ rows, label }: { rows: Row[]; label: (k: string) => React.React
 }
 
 function GameDetail({ g, onClose }: { g: Game; onClose: () => void }) {
-  const { players, decks, remove } = useStore()
+  const { players, decks, remove, add } = useStore()
   const perms = usePerms()
   const P = byId(players)
   const D = byId(decks)
@@ -282,9 +284,13 @@ function GameDetail({ g, onClose }: { g: Game; onClose: () => void }) {
           <button
             className="danger"
             onClick={async () => {
-              if (!(await ask('Eliminare questa partita dalle statistiche?'))) return
-              await remove('games', g.id)
               onClose()
+              const { pod_id: _p, ...row } = g
+              await withUndo(
+                'Partita eliminata',
+                () => remove('games', g.id),
+                () => add('games', row),
+              )
             }}
           >
             Elimina partita

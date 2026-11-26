@@ -4,17 +4,16 @@ import { cardListInfo, commanderListInfo, updateCardList, updateCommanderList } 
 import { APP_VERSION, isNewer, latestRelease, type Release } from '../lib/version'
 import { PLAYER_COLORS, dateIt } from '../lib/util'
 import type { Tier } from '../lib/types'
-import { isCloud, supabase } from '../lib/supabase'
+import { isCloud } from '../lib/supabase'
 import { TABLES } from '../lib/types'
-import { Header, PlayerSelect } from '../components'
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
 import { usePerms } from '../lib/pod'
-import { GroupAdmin, GroupCard } from './Group'
 
-export default function SettingsPage() {
+// Sezioni usate dalle schermate Account e Pod (la vecchia scheda "Altro" non esiste più)
+
+export function DataCard() {
   const store = useStore()
-  const [me, setMe] = useMe()
   const perms = usePerms()
 
   function exportJson() {
@@ -37,87 +36,79 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="stack">
-      <Header title="Altro" sub="Impostazioni e dati" />
-      {isCloud ? (
-        <GroupCard />
-      ) : (
-        <div className="card stack">
-          <h2 className="section">
-            <Icon name="user" size={16} /> Chi sei?
-          </h2>
-          <p className="muted small">Serve per mostrarti il tuo saldo e preimpostare i moduli. Viene salvato solo su questo dispositivo.</p>
-          <PlayerSelect players={store.players} value={me ?? ''} onChange={(v) => setMe(v || null)} placeholder="Nessuno" />
-        </div>
+    <div className="card stack">
+      <h2 className="section">
+        <Icon name="cards" size={16} /> Dati
+      </h2>
+      <p className="muted small">
+        {isCloud ? 'Sincronizzato con Supabase: tutti nel pod vedono gli stessi dati in tempo reale. Il backup riguarda il pod attivo.' : 'Modalità locale: i dati sono solo su questo dispositivo.'}
+      </p>
+      {import.meta.env.VITE_DEMO !== '1' && <button onClick={exportJson}>Esporta backup (JSON)</button>}
+      {perms.admin && (
+        <label className="button-like">
+          Importa backup
+          <input type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
+        </label>
       )}
-
-      {isCloud && perms.admin && <GroupAdmin />}
-      {perms.admin && <TierManager />}
-      <CommanderList />
-      <CardNamesList />
-
-      <div className="card stack">
-        <h2 className="section">
-          <Icon name="cards" size={16} /> Dati
-        </h2>
-        <p className="muted small">
-          {isCloud ? 'Sincronizzato con Supabase: tutti nel gruppo vedono gli stessi dati in tempo reale.' : 'Modalità locale: i dati sono solo su questo dispositivo.'}
-        </p>
-        {import.meta.env.VITE_DEMO !== '1' && <button onClick={exportJson}>Esporta backup (JSON)</button>}
-        {perms.admin && (
-          <label className="button-like">
-            Importa backup
-            <input type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
-          </label>
-        )}
-        <button onClick={() => store.reload()}>Ricarica dati</button>
-      </div>
-
-      {APP_VERSION && <VersionCard />}
-
-      {!isCloud && (
-        <div className="card stack">
-          <h2 className="section">
-            <Icon name="play" size={16} /> Prova
-          </h2>
-          <p className="muted small">
-            {store.isDemo ? 'Ora vedi dati di esempio. Svuota per partire da zero con il tuo gruppo.' : 'Carica 5 amici, 9 comandanti e 10 partite di esempio per vedere come funziona.'}
-          </p>
-          {store.isDemo ? (
-            <button
-              className="primary"
-              onClick={async () => {
-                if (await ask('Cancellare tutti i dati di esempio e partire da zero?')) {
-                  await store.clearAll()
-                  setMe(null)
-                }
-              }}
-            >
-              Svuota e inizia da zero
-            </button>
-          ) : (
-            <button
-              onClick={async () => {
-                if (await ask('Sostituire i dati attuali con quelli di esempio?')) await store.loadDemo()
-              }}
-            >
-              Carica dati di esempio
-            </button>
-          )}
-        </div>
-      )}
-
-      {isCloud && (
-        <button className="danger" onClick={() => supabase!.auth.signOut()}>
-          Esci
-        </button>
-      )}
-      <p className="muted small center-text">Immagini e nomi delle carte da Scryfall. Non affiliato a Wizards of the Coast.</p>
+      <button onClick={() => store.reload()}>Ricarica dati</button>
     </div>
   )
 }
 
-function TierManager() {
+// modalità locale: "chi sei" sul dispositivo e dati di esempio
+export function LocalCards() {
+  const store = useStore()
+  const [me, setMe] = useMe()
+  return (
+    <>
+      <div className="card stack">
+        <h2 className="section">
+          <Icon name="user" size={16} /> Chi sei?
+        </h2>
+        <p className="muted small">Serve per mostrarti il tuo saldo e preimpostare i moduli. Viene salvato solo su questo dispositivo.</p>
+        <select value={me ?? ''} onChange={(e) => setMe(e.target.value || null)}>
+          <option value="">Nessuno</option>
+          {store.players.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="card stack">
+        <h2 className="section">
+          <Icon name="play" size={16} /> Prova
+        </h2>
+        <p className="muted small">
+          {store.isDemo ? 'Ora vedi dati di esempio. Svuota per partire da zero con il tuo gruppo.' : 'Carica 5 amici, 9 comandanti e 10 partite di esempio per vedere come funziona.'}
+        </p>
+        {store.isDemo ? (
+          <button
+            className="primary"
+            onClick={async () => {
+              if (await ask('Cancellare tutti i dati di esempio e partire da zero?')) {
+                await store.clearAll()
+                setMe(null)
+              }
+            }}
+          >
+            Svuota e inizia da zero
+          </button>
+        ) : (
+          <button
+            onClick={async () => {
+              if (await ask('Sostituire i dati attuali con quelli di esempio?')) await store.loadDemo()
+            }}
+          >
+            Carica dati di esempio
+          </button>
+        )}
+      </div>
+    </>
+  )
+}
+
+export function TierManager() {
   const { tiers, decks, add, update, remove } = useStore()
   const sorted = [...tiers].sort((a, b) => a.sort_order - b.sort_order)
   const [name, setName] = useState('')
@@ -189,7 +180,7 @@ function TierManager() {
   )
 }
 
-function VersionCard() {
+export function VersionCard() {
   const [state, setState] = useState<{ release: Release | null; err?: string } | null>(null)
   const [busy, setBusy] = useState(false)
   async function check() {
@@ -254,7 +245,7 @@ function ScryfallList({
     try {
       const n = await update()
       setInfo(await load())
-      setMsg(n ? `Aggiunti ${n} nuovi.` : 'Nessuna novità: la lista è già aggiornata.')
+      setMsg(n ? `Aggiunte ${n} novità.` : 'Nessuna novità: la lista è già aggiornata.')
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Aggiornamento non riuscito. Controlla la connessione e riprova.')
     } finally {
@@ -272,7 +263,7 @@ function ScryfallList({
       {msg && <p className="small no-m">{msg}</p>}
       {err && <p className="small neg no-m">{err}</p>}
       <button onClick={run} disabled={busy || !info}>
-        {busy ? `Cerco ${noun} nuovi…` : `Cerca ${noun} nuovi su Scryfall`}
+        {busy ? `Cerco ${noun} ${noun === 'carte' ? 'nuove' : 'nuovi'}…` : `Cerca ${noun} ${noun === 'carte' ? 'nuove' : 'nuovi'} su Scryfall`}
       </button>
     </div>
   )
@@ -280,7 +271,7 @@ function ScryfallList({
 
 const it = (n: number) => n.toLocaleString('it-IT')
 
-function CommanderList() {
+export function CommanderList() {
   return (
     <ScryfallList
       title="Lista comandanti"
@@ -293,7 +284,7 @@ function CommanderList() {
   )
 }
 
-function CardNamesList() {
+export function CardNamesList() {
   return (
     <ScryfallList
       title="Lista carte (scambi)"

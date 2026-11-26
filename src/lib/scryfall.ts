@@ -182,6 +182,13 @@ export async function updateCardList(): Promise<number> {
 
 export type CardHit = { name: string; printed?: string } // name = nome inglese, printed = nome italiano
 
+// nome italiano di una carta (dalla lista nell'app), se c'è
+export async function italianOf(name: string): Promise<string | undefined> {
+  const ix = await loadCardIndex()
+  const i = ix.en.findIndex((n) => n.toLowerCase() === name.toLowerCase())
+  return i >= 0 ? ix.it[i] : undefined
+}
+
 // Ricerca offline per nome inglese o italiano
 export async function searchCards(q: string): Promise<CardHit[]> {
   const query = norm(q).trim()

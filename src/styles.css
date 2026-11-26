@@ -403,3 +403,64 @@ button.link.inline { display: inline; font-weight: 700; text-decoration: underli
 .share-input { width: 92px; text-align: right; padding: 0.4rem 0.6rem; font-variant-numeric: tabular-nums; }
 button.link.small { font-size: 0.82rem; }
 .tiny { font-size: 0.7rem; }
+
+/* ---------- intestazione con il pod attivo, schermate, toast ---------- */
+.app-header { flex: none; background: var(--bg); padding: 8px 12px 0; padding-top: calc(8px + env(safe-area-inset-top)); }
+.app-header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; max-width: 760px; margin: 0 auto; }
+.pod-pill { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 12px 6px 6px; border-radius: 16px; background: var(--bg2); border: 1px solid var(--line2); text-align: left; min-width: 0; max-width: calc(100% - 60px); }
+.pod-pill-text { display: flex; flex-direction: column; min-width: 0; }
+.pod-pill-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pod-pill-sub { font-size: 0.74rem; color: var(--muted); white-space: nowrap; }
+.pod-pill-chevron { transform: rotate(90deg); color: var(--muted); flex: none; }
+.pod-badge { display: inline-grid; place-items: center; border-radius: 9px; color: #120e05; font-weight: 800; flex: none; font-family: var(--display); box-shadow: inset 0 0 0 1px #ffffff40; }
+.avatar-btn { width: 48px; height: 48px; padding: 0; border-radius: 50%; background: none; border: none; display: grid; place-items: center; -webkit-touch-callout: none; user-select: none; }
+.pod-bar { height: 3px; background: var(--pod); margin: 8px -12px 0; box-shadow: 0 0 12px var(--pod); }
+.app-title { font-family: var(--display); font-weight: 700; letter-spacing: 0.04em; }
+.page-fade { animation: fade 0.18s ease; }
+
+.screen { position: fixed; inset: 0; z-index: 45; background: var(--bg); display: flex; flex-direction: column; animation: slide-in 0.18s ease; }
+.screen-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; padding-top: calc(10px + env(safe-area-inset-top)); border-bottom: 1px solid var(--line); }
+.screen-title { font-size: 1.3rem; }
+.screen-body { flex: 1; overflow-y: auto; padding: 16px 16px 40px; max-width: 760px; width: 100%; margin: 0 auto; }
+@keyframes slide-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.pod-hero, .account-hero { gap: 14px; }
+.pod-hero-name { font-family: var(--display); font-size: 1.25rem; font-weight: 700; }
+.pod-row { gap: 12px; }
+.role-chip { font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; background: var(--bg4); color: var(--muted); white-space: nowrap; }
+.role-chip.admin { background: #3b2f0c; color: #f5d97c; }
+.right-text { text-align: right; }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 10px; width: min(92vw, 460px); padding: 10px 12px 10px 14px; border-radius: 14px; background: #2a2536f2; border: 1px solid var(--line2); box-shadow: 0 10px 30px #000b; backdrop-filter: blur(10px); animation: toast-in 0.18s ease; font-size: 0.92rem; }
+.toast-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.toast-action { background: none; border: none; color: var(--gold); font-weight: 800; padding: 0.4rem 0.6rem; min-height: 40px; }
+@keyframes toast-in { from { transform: translate(-50%, 12px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+/* ---------- titoli che si compattano scorrendo ---------- */
+.page-head { position: sticky; top: -18px; z-index: 3; background: var(--bg); margin: -18px -16px 0; padding: 18px 16px 8px; transition: padding 0.15s; }
+.page-head h1 { transition: font-size 0.15s; }
+.content.scrolled .page-head { padding-top: 22px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.content.scrolled .page-head h1 { font-size: 1.15rem; }
+.content.scrolled .page-sub { display: none; }
+
+/* ---------- target touch di almeno 44px ---------- */
+.icon-btn { width: 44px; height: 44px; }
+.icon-btn.sm { width: 40px; height: 40px; }
+.small-btn { min-height: 40px; }
+.chip, .tier-chip { min-height: 40px; }
+.change-link { padding: 10px 4px; }
+.chip.tiny { min-height: 0; }
+
+/* ---------- nuova partita ---------- */
+.player-pick .chip.big:not(.on) { opacity: 0.6; border-color: var(--line2); }
+.player-pick .chip.big .gold { width: 22px; height: 22px; }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp2 .deckchip { display: inline; }
+.sticky-cta { position: sticky; bottom: -28px; z-index: 4; margin: 8px -16px -28px; padding: 14px 16px 18px; background: linear-gradient(180deg, transparent, var(--bg) 30%); display: flex; flex-direction: column; gap: 6px; }
+.sticky-cta button.primary.big { margin-top: 0; }
+.empty button.primary { margin-top: 10px; }
+
+/* ---------- campi con errore ---------- */
+.field.invalid input, .field.invalid select { border-color: var(--neg); box-shadow: 0 0 0 3px #e0525226; }
+.field.invalid .chips { outline: 1px solid var(--neg); outline-offset: 4px; border-radius: 12px; }
+.field-error { color: var(--neg); font-size: 0.8rem; font-style: normal; }
+button.card-link { cursor: pointer; }

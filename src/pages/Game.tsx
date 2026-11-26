@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useStore } from '../lib/store'
 import type { Deck, Participant, Player } from '../lib/types'
 import { byId, deckLabel } from '../lib/util'
-import { Avatar, DeckArt, DeckCard, DeckChip, Header, Modal, Pips, SplitArt, TierBadge, deckArts, manaGradient } from '../components'
+import { Avatar, DeckArt, DeckCard, DeckChip, Empty, Header, Modal, Pips, SplitArt, TierBadge, deckArts, manaGradient } from '../components'
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
 import { useBack } from '../lib/back'
+import { usePod } from '../lib/pod'
+import { useNav } from '../lib/nav'
+import { buzz, prefs } from '../lib/prefs'
 
 type Seat = {
   player_id: string
@@ -67,14 +70,17 @@ export default function GamePage() {
 
 // ------------------------------------------------------------ SETUP
 function Setup({ onStart }: { onStart: (l: Live) => void }) {
-  const { players, decks, games, tiers } = useStore()
+  const { players: allPlayers, decks, games, tiers } = useStore()
+  const players = allPlayers.filter((p) => !p.archived)
+  const pod = usePod()?.current
+  const nav = useNav()
   const [saved] = useState(loadSetup)
   // solo giocatori, mazzi e tier che esistono ancora
   const [sel, setSel] = useState<string[]>(() => (saved.sel ?? []).filter((id) => players.some((p) => p.id === id)))
   const [deckOf, setDeckOf] = useState<Record<string, string>>(() =>
     Object.fromEntries(Object.entries(saved.deckOf ?? {}).filter(([, d]) => decks.some((x) => x.id === d))),
   )
-  const [life, setLife] = useState(saved.life ?? 40)
+  const [life, setLife] = useState(saved.life ?? prefs.startingLife)
   const [picking, setPicking] = useState<string | null>(null)
   const [tier, setTier] = useState<string | null>(saved.tier && tiers.some((t) => t.id === saved.tier) ? saved.tier : null) // null = misto
   const [layout, setLayout] = useState<Layout>(saved.layout ?? 'sides')
@@ -126,6 +132,7 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
     } catch {
       /* storage non disponibile */
     }
+    buzz(40)
     onStart({
       startedAt: new Date().toISOString(),
       startingLife: life,
@@ -136,21 +143,42 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
 
   return (
     <div className="stack">
-      <Header title="Nuova partita" sub={sel.length ? `${sel.length} giocatori · ${life} punti vita` : 'Scegli chi siede al tavolo'} />
-      {players.length === 0 && <div className="empty">Prima aggiungi i giocatori e i loro comandanti in Profili.</div>}
+      <Header
+        title="Nuova partita"
+        sub={
+          <>
+            {pod && (
+              <>
+                in <b style={{ color: pod.color }}>{pod.name}</b> ·{' '}
+              </>
+            )}
+            {sel.length ? `${sel.length} giocatori · ${life} punti vita` : 'scegli chi siede al tavolo'}
+          </>
+        }
+      />
+      {players.length === 0 && (
+        <Empty icon="users" action={{ label: 'Vai a Giocatori', run: () => nav.setTab('players') }}>
+          Prima aggiungi i giocatori e i loro comandanti.
+        </Empty>
+      )}
       <h2>Chi gioca?</h2>
-      <div className="chips">
-        {players.map((p) => (
-          <button key={p.id} className={`chip big ${sel.includes(p.id) ? 'on' : ''}`} onClick={() => toggle(p.id)}>
-            <Avatar p={p} size={22} /> {p.name}
-          </button>
-        ))}
+      <div className="chips player-pick">
+        {players.map((p) => {
+          const on = sel.includes(p.id)
+          return (
+            <button key={p.id} className={`chip big ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => toggle(p.id)}>
+              {on ? <Icon name="check" size={18} className="gold" /> : <Avatar p={p} size={22} />} {p.name}
+            </button>
+          )
+        })}
       </div>
 
       {sel.length > 0 && (
         <>
           <h2>Con che mazzo?</h2>
           <div className="card stack-sm">
+            {sortedTiers.length > 0 && <h3 className="no-m">Tier dei mazzi</h3>}
+            {sortedTiers.length > 0 && <p className="muted small no-m">Misto = qualsiasi tier. Gli altri sono i tier che date ai mazzi (in Giocatori).</p>}
             {sortedTiers.length > 0 && (
               <div className="chips">
                 <button className={`tier-chip none ${tier === null ? 'on' : ''}`} onClick={() => setTier(null)}>
@@ -182,7 +210,7 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
                 </div>
                 <div className="grow stack-sm">
                   <div className="strong">{P[id]?.name}</div>
-                  <div className="small">{D[deckOf[id]] ? <DeckChip d={D[deckOf[id]]} /> : <span className="muted">Scegli il mazzo</span>}</div>
+                  <div className="small clamp2">{D[deckOf[id]] ? <DeckChip d={D[deckOf[id]]} /> : <span className="muted">Scegli il mazzo</span>}</div>
                   {D[deckOf[id]] && D[deckOf[id]].player_id !== id && <div className="muted small">mazzo di {P[D[deckOf[id]].player_id]?.name}</div>}
                 </div>
                 <span className="change-link">Cambia</span>
@@ -217,9 +245,12 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
         ))}
       </div>
 
-      <button className="primary big" disabled={sel.length < 2} onClick={start}>
-        <Icon name="play" size={18} /> Inizia partita
-      </button>
+      <div className="sticky-cta">
+        <button className="primary big" disabled={sel.length < 2} onClick={start}>
+          <Icon name="play" size={18} /> Inizia partita{pod ? ` in ${pod.name}` : ''}
+        </button>
+        {sel.length < 2 && <p className="muted small center-text no-m">Scegli almeno 2 giocatori</p>}
+      </div>
     </div>
   )
 }
