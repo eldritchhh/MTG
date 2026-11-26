@@ -9,10 +9,22 @@ export function toast(msg: ReactNode, opts: { color?: string; action?: { label: 
   push?.({ id: ++seq, msg, color: opts.color, action: opts.action, ms: opts.ms ?? (opts.action ? 5000 : 2200) })
 }
 
-// azione reversibile: la esegue subito e propone "Annulla" per qualche secondo (al posto di una conferma)
-export async function withUndo(msg: ReactNode, run: () => Promise<unknown> | unknown, undo: () => Promise<unknown> | unknown) {
-  await run()
-  toast(msg, { action: { label: 'Annulla', run: () => void undo() } })
+// azione reversibile: la esegue subito e propone "Annulla" per qualche secondo (al posto di una conferma).
+// false se non è riuscita (es. senza rete): il messaggio lo dice, chi chiama può lasciare tutto com'era
+export async function withUndo(msg: ReactNode, run: () => Promise<unknown> | unknown, undo: () => Promise<unknown> | unknown): Promise<boolean> {
+  try {
+    await run()
+  } catch {
+    toast('Non salvato: controlla la connessione e riprova', { color: 'var(--neg)' })
+    return false
+  }
+  toast(msg, {
+    action: {
+      label: 'Annulla',
+      run: () => void Promise.resolve(undo()).catch(() => toast('Annullamento non riuscito: controlla la connessione', { color: 'var(--neg)' })),
+    },
+  })
+  return true
 }
 
 export function ToastHost() {

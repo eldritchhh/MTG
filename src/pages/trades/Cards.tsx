@@ -107,7 +107,7 @@ export function CardsTab() {
 
 // Conto con X: due liste selezionabili, Restituisci / Salda
 function ContoScreen({ other, onClose }: { other: string; onClose: () => void }) {
-  const { players, card_loans, update, add, remove } = useStore()
+  const { players, card_loans, batch } = useStore()
   const [me] = useMe()
   const perms = usePerms()
   const [sel, setSel] = useState<Record<string, number>>({})
@@ -141,32 +141,35 @@ function ContoScreen({ other, onClose }: { other: string; onClose: () => void })
     const now = new Date().toISOString()
     const done: { l: CardLoan; newId?: string }[] = []
     const n = selected.reduce((s, [, q]) => s + q, 0)
-    await withUndo(
+    const ok = await withUndo(
       `${n} carte restituite`,
-      async () => {
-        for (const [id, q] of selected) {
-          const l = card_loans.find((x) => x.id === id)
-          if (!l) continue
-          if (q >= l.quantity) {
-            await update('card_loans', l.id, { status: 'returned', closed_at: now })
-            done.push({ l })
-          } else {
-            const { id: _i, created_at: _c, pod_id: _p, ...rest } = l
-            await update('card_loans', l.id, { quantity: l.quantity - q })
-            const row = await add('card_loans', { ...rest, quantity: q, status: 'returned', closed_at: now })
-            done.push({ l, newId: row.id })
+      () =>
+        batch((tx) => {
+          for (const [id, q] of selected) {
+            const l = card_loans.find((x) => x.id === id)
+            if (!l) continue
+            if (q >= l.quantity) {
+              tx.update('card_loans', l.id, { status: 'returned', closed_at: now })
+              done.push({ l })
+            } else {
+              const { id: _i, created_at: _c, pod_id: _p, ...rest } = l
+              tx.update('card_loans', l.id, { quantity: l.quantity - q })
+              const row = tx.add('card_loans', { ...rest, quantity: q, status: 'returned', closed_at: now })
+              done.push({ l, newId: row.id })
+            }
           }
-        }
-      },
-      async () => {
-        for (const d of done) {
-          if (d.newId) {
-            await remove('card_loans', d.newId)
-            await update('card_loans', d.l.id, { quantity: d.l.quantity })
-          } else await update('card_loans', d.l.id, { status: 'open', closed_at: null })
-        }
-      },
+        }),
+      () =>
+        batch((tx) => {
+          for (const d of done) {
+            if (d.newId) {
+              tx.remove('card_loans', d.newId)
+              tx.update('card_loans', d.l.id, { quantity: d.l.quantity })
+            } else tx.update('card_loans', d.l.id, { status: 'open', closed_at: null })
+          }
+        }),
     )
+    if (!ok) return
     buzz()
     setSel({})
   }

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { TableName, Tables } from './types'
+import type { Op } from './ops'
 
 export interface Backend {
   list<T extends TableName>(t: T, podId?: string | null): Promise<Tables[T][]>
@@ -7,6 +8,7 @@ export interface Backend {
   // podId: un mazzo personale compare in più gruppi; tier e "nascosto" valgono solo per quello aperto
   update<T extends TableName>(t: T, id: string, patch: Partial<Tables[T]>, podId?: string | null): Promise<void>
   remove(t: TableName, id: string, podId?: string | null): Promise<void>
+  batch(ops: Op[]): Promise<void> // tutte o nessuna
 }
 
 // i mazzi si leggono e scrivono dalla vista pod_decks (supabase/decks.sql): giocatore e tier già del gruppo
@@ -39,10 +41,25 @@ const cloud: Backend = {
     const { error } = await q
     if (error) throw error
   },
+  async batch(ops) {
+    const { error } = await supabase!.rpc('apply_ops', { ops })
+    if (!error) return
+    // database senza supabase/ops.sql (funzione non trovata): una scrittura alla volta, come prima
+    if (error.code === 'PGRST202') return sequential(this, ops)
+    throw error
+  },
+}
+
+async function sequential(b: Backend, ops: Op[]) {
+  for (const o of ops) {
+    if (o.op === 'insert') await b.insert(o.table, o.row as never)
+    else if (o.op === 'update') await b.update(o.table, o.id, o.patch as never)
+    else await b.remove(o.table, o.id)
+  }
 }
 
 // Postgres numeric arriva come stringa
-function normalize(t: TableName, r: Record<string, unknown>) {
+export function normalize(t: TableName, r: Record<string, unknown>) {
   if (t === 'debts') return { ...r, amount: Number(r.amount), group_total: r.group_total == null ? null : Number(r.group_total) }
   return r
 }
@@ -88,6 +105,9 @@ const local: Backend = {
   },
   async remove(t, id) {
     write(t, read(t).filter((r: { id: string }) => r.id !== id))
+  },
+  async batch(ops) {
+    return sequential(this, ops)
   },
 }
 

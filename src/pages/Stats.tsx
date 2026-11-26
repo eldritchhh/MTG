@@ -7,14 +7,8 @@ import { withUndo } from '../lib/toast'
 import { useNav } from '../lib/nav'
 import { Icon } from '../icons'
 import { usePerms } from '../lib/pod'
+import { expPct, pct, score, type Row } from '../lib/stats'
 
-// exp = vittorie attese: in una partita a N giocatori ognuno vince "di base" 1 volta su N
-type Row = { key: string; games: number; wins: number; exp: number }
-const pct = (r: Row) => (r.games ? Math.round((r.wins / r.games) * 100) : 0)
-const expPct = (r: Row) => (r.games ? Math.round((r.exp / r.games) * 100) : 0)
-// rendimento: vittorie in più (o in meno) rispetto all'atteso, pesate sul numero di partite
-// (+3 al denominatore: con poche partite il risultato conta meno, così 1 su 1 non batte 6 su 10)
-const score = (r: Row) => (r.wins - r.exp) / (r.games + 3)
 const MIN_CHAMP = 3 // partite minime per essere "mazzo campione"
 
 export default function StatsPage() {

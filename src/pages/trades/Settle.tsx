@@ -21,7 +21,7 @@ const cents = (s: string) => (s.trim() ? Math.round(parseEur(s) * 100) : null)
 
 // selection: righe del conto selezionate → copie (entrambe le direzioni)
 export function SettleSheet({ other, selection, onClose, onDone }: { other: string; selection: Record<string, number>; onClose: () => void; onDone: () => void }) {
-  const { players, card_loans, add, update } = useStore()
+  const { players, card_loans, batch } = useStore()
   const [me] = useMe()
   const otherName = players.find((p) => p.id === other)?.name ?? ''
   const pick = (dir: 'keep' | 'mine'): Kept[] =>
@@ -37,6 +37,7 @@ export function SettleSheet({ other, selection, onClose, onDone }: { other: stri
   const [resolution, setResolution] = useState<'accepted' | 'money'>('accepted')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
 
   // valori di partenza: il prezzo di oggi (modificabile prima di confermare)
   useEffect(() => {
@@ -69,41 +70,51 @@ export function SettleSheet({ other, selection, onClose, onDone }: { other: stri
     if (!me || busy) return
     if (!keep.length && !mine.length && !given.length && !money.length) return
     setBusy(true)
+    setFailed(false)
     const now = new Date().toISOString()
-    const s = await add('settlements', {
-      player_a: me, player_b: other, note: note.trim() || null, difference_cents: diff, difference_resolution: diff !== 0 ? resolution : 'accepted',
-    })
-    const item = (p: Partial<SettlementItem>) =>
-      add('settlement_items', {
-        settlement_id: s.id, kind: 'kept', loan_id: null, from_player: me, to_player: other, name: null, quantity: 1, value_cents: null,
-        value_source: null, amount_cents: null, mode: null, debt_id: null, ...p,
+    // tutto il saldo in un colpo solo: o c'è intero o non c'è (mai carte saldate senza i soldi, o viceversa)
+    try {
+      await batch((tx) => {
+        const s = tx.add('settlements', {
+          player_a: me, player_b: other, note: note.trim() || null, difference_cents: diff, difference_resolution: diff !== 0 ? resolution : 'accepted',
+        })
+        const item = (p: Partial<SettlementItem>) =>
+          tx.add('settlement_items', {
+            settlement_id: s.id, kind: 'kept', loan_id: null, from_player: me, to_player: other, name: null, quantity: 1, value_cents: null,
+            value_source: null, amount_cents: null, mode: null, debt_id: null, ...p,
+          })
+        // carte tenute (entrambe le direzioni); saldare solo alcune copie divide la riga
+        for (const k of [...keep, ...mine]) {
+          let loanId = k.loan.id
+          if (k.qty < k.loan.quantity) {
+            tx.update('card_loans', k.loan.id, { quantity: k.loan.quantity - k.qty })
+            const { id: _i, created_at: _c, pod_id: _p, ...rest } = k.loan
+            loanId = tx.add('card_loans', { ...rest, quantity: k.qty, status: 'settled', closed_at: now, settlement_id: s.id }).id
+          } else tx.update('card_loans', k.loan.id, { status: 'settled', closed_at: now, settlement_id: s.id })
+          const v = cents(k.value)
+          item({ kind: 'kept', loan_id: loanId, from_player: k.loan.owner_player, to_player: k.loan.holder_player, name: k.loan.name, quantity: k.qty, value_cents: v, value_source: v == null ? 'none' : 'manual' })
+        }
+        for (const g of given) {
+          const v = cents(g.value)
+          item({ kind: 'given', name: g.name, quantity: g.qty, value_cents: v, value_source: v == null ? 'none' : 'manual' })
+        }
+        // soldi: quelli da pagare diventano un movimento nella scheda Soldi
+        const debt = (from: string, to: string, amount: number) =>
+          tx.add('debts', { debtor_id: from, creditor_id: to, amount: amount / 100, description: `Saldo carte con ${from === me ? otherName : players.find((p) => p.id === me)?.name}`, settled: false, group_id: null, group_total: null, settlement_id: s.id }).id
+        for (const m of money) {
+          const a = cents(m.amount)
+          if (!a) continue
+          item({ kind: 'money', amount_cents: a, mode: m.mode, debt_id: m.mode === 'due' ? debt(me, other, a) : null })
+        }
+        if (diff !== 0 && resolution === 'money') {
+          const [from, to] = diff > 0 ? [me, other] : [other, me]
+          item({ kind: 'money', from_player: from, to_player: to, amount_cents: Math.abs(diff), mode: 'due', debt_id: debt(from, to, Math.abs(diff)) })
+        }
       })
-    // carte tenute (entrambe le direzioni); saldare solo alcune copie divide la riga
-    for (const k of [...keep, ...mine]) {
-      let loanId = k.loan.id
-      if (k.qty < k.loan.quantity) {
-        await update('card_loans', k.loan.id, { quantity: k.loan.quantity - k.qty })
-        const { id: _i, created_at: _c, pod_id: _p, ...rest } = k.loan
-        loanId = (await add('card_loans', { ...rest, quantity: k.qty, status: 'settled', closed_at: now, settlement_id: s.id })).id
-      } else await update('card_loans', k.loan.id, { status: 'settled', closed_at: now, settlement_id: s.id })
-      const v = cents(k.value)
-      await item({ kind: 'kept', loan_id: loanId, from_player: k.loan.owner_player, to_player: k.loan.holder_player, name: k.loan.name, quantity: k.qty, value_cents: v, value_source: v == null ? 'none' : 'manual' })
-    }
-    for (const g of given) {
-      const v = cents(g.value)
-      await item({ kind: 'given', name: g.name, quantity: g.qty, value_cents: v, value_source: v == null ? 'none' : 'manual' })
-    }
-    // soldi: quelli da pagare diventano un movimento nella scheda Soldi
-    const debt = async (from: string, to: string, amount: number) =>
-      (await add('debts', { debtor_id: from, creditor_id: to, amount: amount / 100, description: `Saldo carte con ${from === me ? otherName : players.find((p) => p.id === me)?.name}`, settled: false, group_id: null, group_total: null, settlement_id: s.id })).id
-    for (const m of money) {
-      const a = cents(m.amount)
-      if (!a) continue
-      await item({ kind: 'money', amount_cents: a, mode: m.mode, debt_id: m.mode === 'due' ? await debt(me, other, a) : null })
-    }
-    if (diff !== 0 && resolution === 'money') {
-      const [from, to] = diff > 0 ? [me, other] : [other, me]
-      await item({ kind: 'money', from_player: from, to_player: to, amount_cents: Math.abs(diff), mode: 'due', debt_id: await debt(from, to, Math.abs(diff)) })
+    } catch {
+      setFailed(true)
+      setBusy(false)
+      return
     }
     buzz()
     toast(`Saldo con ${otherName} confermato`)
@@ -246,6 +257,7 @@ export function SettleSheet({ other, selection, onClose, onDone }: { other: stri
           <p className="muted small no-m">I soldi da pagare entrano nei saldi (scheda Soldi). Il valore delle carte si congela adesso.</p>
         </div>
         <input placeholder="Nota (facoltativa)" value={note} onChange={(e) => setNote(e.target.value)} />
+        {failed && <p className="small neg no-m">Saldo non salvato: controlla la connessione e riprova.</p>}
         <button className="primary" disabled={busy || (!keep.length && !mine.length && !given.length && !money.length)} onClick={confirm}>
           Conferma saldo
         </button>
@@ -256,7 +268,7 @@ export function SettleSheet({ other, selection, onClose, onDone }: { other: stri
 
 // Dettaglio di un saldo (da Storico o dal movimento "Saldo carte con X" nei Soldi)
 export function SettlementDetail({ id, onClose }: { id: string; onClose: () => void }) {
-  const { settlements, settlement_items, card_loans, debts, players, update, remove } = useStore()
+  const { settlements, settlement_items, card_loans, debts, players, batch } = useStore()
   const perms = usePerms()
   const s = settlements.find((x) => x.id === id)
   const name = (pid: string) => players.find((p) => p.id === pid)?.name ?? '?'
@@ -290,16 +302,23 @@ export function SettlementDetail({ id, onClose }: { id: string; onClose: () => v
   // annullare: le carte tornano nel conto, i soldi da pagare spariscono (solo se nessuno li ha ancora pagati)
   async function undo() {
     if (!s || !(await ask('Annullare il saldo? Le carte tornano aperte nel conto e i soldi da pagare spariscono dai saldi.'))) return
-    for (const l of card_loans.filter((c) => c.settlement_id === s.id)) {
-      const twin = card_loans.find((c) => c.status === 'open' && c.id !== l.id && c.owner_player === l.owner_player && c.holder_player === l.holder_player && c.name.toLowerCase() === l.name.toLowerCase())
-      if (twin) {
-        await update('card_loans', twin.id, { quantity: twin.quantity + l.quantity })
-        await remove('card_loans', l.id)
-      } else await update('card_loans', l.id, { status: 'open', closed_at: null, settlement_id: null })
+    try {
+      await batch((tx) => {
+        for (const l of card_loans.filter((c) => c.settlement_id === s.id)) {
+          const twin = card_loans.find((c) => c.status === 'open' && c.id !== l.id && c.owner_player === l.owner_player && c.holder_player === l.holder_player && c.name.toLowerCase() === l.name.toLowerCase())
+          if (twin) {
+            tx.update('card_loans', twin.id, { quantity: twin.quantity + l.quantity })
+            tx.remove('card_loans', l.id)
+          } else tx.update('card_loans', l.id, { status: 'open', closed_at: null, settlement_id: null })
+        }
+        for (const d of linkedDebts) tx.remove('debts', d.id)
+        for (const i of items) tx.remove('settlement_items', i.id)
+        tx.remove('settlements', s.id)
+      })
+    } catch {
+      toast('Saldo non annullato: controlla la connessione e riprova')
+      return
     }
-    for (const d of linkedDebts) await remove('debts', d.id)
-    for (const i of items) await remove('settlement_items', i.id)
-    await remove('settlements', s.id)
     toast('Saldo annullato')
     onClose()
   }

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { backend, resetLocal } from './backend'
+import { backend, normalize, resetLocal } from './backend'
+import { applyOps, type Op } from './ops'
 import { defaultTiers, demoData } from './demo'
 import { isCloud } from './supabase'
 import { supabase } from './supabase'
@@ -18,8 +19,21 @@ type Store = Data & {
   add<T extends TableName>(t: T, row: NewRow<T>): Promise<Tables[T]>
   update<T extends TableName>(t: T, id: string, patch: Partial<Tables[T]>): Promise<void>
   remove(t: TableName, id: string): Promise<void>
+  // più scritture insieme (tutte o nessuna): build le prepara con tx.add / tx.update / tx.remove
+  batch(build: (tx: Tx) => void): Promise<void>
   reload(): Promise<void>
 }
+
+export type Tx = {
+  add<T extends TableName>(t: T, row: NewRow<T>): Tables[T]
+  update<T extends TableName>(t: T, id: string, patch: Partial<Tables[T]>): void
+  remove(t: TableName, id: string): void
+}
+
+// le scritture lanciano l'errore (dopo averlo mostrato e aver ricaricato i dati):
+// chi chiama può tenere aperto il modulo, proporre "Riprova", non cancellare la partita…
+const REALTIME_TABLES = TABLES.filter((t) => t !== 'decks') // i mazzi passano dalla vista pod_decks: si ricaricano
+const STALE_MS = 60_000 // riaprendo l'app dopo più di un minuto ricarico tutto (il tempo reale può aver perso qualcosa)
 
 const DEMO_VERSION = '4' // 4: prestiti diventano il conto carte
 const empty: Data = { players: [], decks: [], debts: [], loans: [], games: [], tiers: [], card_loans: [], settlements: [], settlement_items: [] }
@@ -65,22 +79,39 @@ export function StoreProvider({ podId = null, children }: { podId?: string | nul
 
   useEffect(() => {
     reload()
-    const onFocus = () => document.visibilityState === 'visible' && reload()
+    let hiddenAt = 0
+    const onFocus = () => {
+      if (document.visibilityState === 'hidden') hiddenAt = Date.now()
+      else if (hiddenAt && Date.now() - hiddenAt > STALE_MS) reload()
+    }
     document.addEventListener('visibilitychange', onFocus)
-    // realtime: quando un amico modifica qualcosa, ricarico quella tabella
-    const ch = supabase
-      ?.channel(`db-changes-${podId ?? 'local'}`)
-      .on('postgres_changes', { event: '*', schema: 'public' }, (p) => {
-        // deck_pod: in quali gruppi compare un mazzo personale (e con che tier)
-        const t = (p.table === 'deck_pod' ? 'decks' : p.table) as TableName
-        if (TABLES.includes(t)) loadTable(t).catch(() => {})
-      })
-      .subscribe()
+    // tempo reale: applico la riga cambiata (solo del gruppo aperto) invece di ricaricare la tabella
+    const upsert = (t: TableName, row: Record<string, unknown>) =>
+      setData((d) => ({ ...d, [t]: applyOps(d, [{ op: 'insert', table: t, row: normalize(t, row) as never }])[t] }))
+    let ch = supabase?.channel(`db-changes-${podId ?? 'local'}`)
+    if (ch && podId) {
+      for (const t of REALTIME_TABLES) {
+        const filter = `pod_id=eq.${podId}`
+        ch = ch
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: t, filter }, (p) => upsert(t, p.new))
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: t, filter }, (p) => upsert(t, p.new))
+          // le eliminazioni non si possono filtrare: arriva solo l'id, se non è tra le mie righe non cambia niente
+          .on('postgres_changes', { event: 'DELETE', schema: 'public', table: t }, (p) => {
+            const id = (p.old as { id?: string }).id
+            if (id) setData((d) => ({ ...d, [t]: (d[t] as { id: string }[]).filter((r) => r.id !== id) }))
+          })
+      }
+      // mazzi: personali (senza gruppo) e tier per gruppo (deck_pod) → ricarico la vista
+      ch = ch
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'decks' }, () => void loadTable('decks').catch(() => {}))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'deck_pod', filter: `pod_id=eq.${podId}` }, () => void loadTable('decks').catch(() => {}))
+    }
+    ch?.subscribe()
     return () => {
       document.removeEventListener('visibilitychange', onFocus)
       if (ch) supabase?.removeChannel(ch)
     }
-  }, [reload, loadTable])
+  }, [reload, loadTable, podId])
 
   const fail = useCallback(
     (e: unknown) => {
@@ -88,6 +119,12 @@ export function StoreProvider({ podId = null, children }: { podId?: string | nul
       reload()
     },
     [reload],
+  )
+
+  // riga completa: id e data se mancano, gruppo aperto
+  const fullRow = useCallback(
+    <T extends TableName>(_t: T, row: NewRow<T>) => ({ id: crypto.randomUUID(), created_at: new Date().toISOString(), ...row, ...(podId ? { pod_id: podId } : {}) }) as Tables[T],
+    [podId],
   )
 
   const store = useMemo<Store>(
@@ -114,12 +151,13 @@ export function StoreProvider({ podId = null, children }: { podId?: string | nul
         await reload()
       },
       async add(t, row) {
-        const full = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...row, ...(podId ? { pod_id: podId } : {}) } as Tables[typeof t]
+        const full = fullRow(t, row)
         setData((d) => ({ ...d, [t]: [...d[t], full] }))
         try {
           await backend.insert(t, full)
         } catch (e) {
           fail(e)
+          throw e
         }
         return full
       },
@@ -129,6 +167,7 @@ export function StoreProvider({ podId = null, children }: { podId?: string | nul
           await backend.update(t, id, patch, podId)
         } catch (e) {
           fail(e)
+          throw e
         }
       },
       async remove(t, id) {
@@ -137,10 +176,32 @@ export function StoreProvider({ podId = null, children }: { podId?: string | nul
           await backend.remove(t, id, podId)
         } catch (e) {
           fail(e)
+          throw e
+        }
+      },
+      async batch(build) {
+        const ops: Op[] = []
+        build({
+          add(t, row) {
+            if (t === 'decks') throw new Error('i mazzi non passano da batch')
+            const full = fullRow(t, row)
+            ops.push({ op: 'insert', table: t, row: full as never })
+            return full
+          },
+          update: (t, id, patch) => void ops.push({ op: 'update', table: t, id, patch }),
+          remove: (t, id) => void ops.push({ op: 'delete', table: t, id }),
+        })
+        if (!ops.length) return
+        setData((d) => applyOps(d, ops))
+        try {
+          await backend.batch(ops)
+        } catch (e) {
+          fail(e)
+          throw e
         }
       },
     }),
-    [data, loading, error, reload, fail, isDemo, podId],
+    [data, loading, error, reload, fail, isDemo, podId, fullRow],
   )
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>

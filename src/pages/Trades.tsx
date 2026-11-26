@@ -5,6 +5,7 @@ import type { Debt, Player } from '../lib/types'
 import { byId, dayIt, eur, netBalances, parseEur, playerName, settlements } from '../lib/util'
 import { Avatar, Empty, Header, Modal, Segmented, Switch } from '../components'
 import { Icon } from '../icons'
+import { groupTotal, payerIncluded, splitEqual } from '../lib/money'
 import { useInPod, usePerms } from '../lib/pod'
 import { useNav } from '../lib/nav'
 import { buzz } from '../lib/prefs'
@@ -39,7 +40,7 @@ export default function TradesPage() {
 
 // ------------------------------------------------------------ SOLDI
 function Money() {
-  const { players, debts, update, add, remove } = useStore()
+  const { players, debts, add, remove, batch } = useStore()
   const [me] = useMe()
   const [form, setForm] = useState<Entry | 'new' | null>(null)
   const [detail, setDetail] = useState<string | null>(null) // saldo carte da mostrare
@@ -66,8 +67,8 @@ function Money() {
     if (Math.abs(pairNet - amount) < 0.005) {
       await withUndo(
         msg,
-        () => Promise.all(open.map((d) => update('debts', d.id, { settled: true }))),
-        () => Promise.all(open.map((d) => update('debts', d.id, { settled: false }))),
+        () => batch((tx) => open.forEach((d) => tx.update('debts', d.id, { settled: true }))),
+        () => batch((tx) => open.forEach((d) => tx.update('debts', d.id, { settled: false }))),
       )
     } else {
       // il pareggio coinvolge più persone: registro il pagamento come movimento compensativo
@@ -215,9 +216,6 @@ function toEntries(debts: Debt[]): Entry[] {
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
 }
 
-const groupTotal = (rows: Debt[]) => rows[0].group_total ?? rows.reduce((s, r) => s + r.amount, 0)
-// chi ha pagato è nella divisione se il totale supera la somma delle quote degli altri
-const payerIncluded = (rows: Debt[]) => Math.abs(groupTotal(rows) - rows.reduce((s, r) => s + r.amount, 0)) > 0.004
 // "per Luca" se la spesa è per una persona sola (non chi ha pagato), altrimenti "4 persone"
 const people = (rows: Debt[], P: Record<string, Player>) => {
   if (rows.length === 1 && !payerIncluded(rows)) return `per ${playerName(P, rows[0].debtor_id)}`
@@ -225,19 +223,13 @@ const people = (rows: Debt[], P: Record<string, Player>) => {
   return `${n} persone`
 }
 
-// divide in centesimi senza perdere arrotondamenti (i centesimi in più vanno ai primi)
-function splitEqual(total: number, n: number) {
-  const cents = Math.round(total * 100)
-  const base = Math.floor(cents / n)
-  return Array.from({ length: n }, (_, i) => (base + (i < cents - base * n ? 1 : 0)) / 100)
-}
 const fmtEur = (n: number) => String(n).replace('.', ',')
 type Errors = Partial<Record<'payer' | 'total' | 'part', string>>
 
 // Un solo form: chi ha pagato → quanto → tra chi si divide.
 // Le vecchie spese "tra due persone" si aprono qui come spese con un solo partecipante (stessi saldi).
 function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
-  const { players, add, update, remove } = useStore()
+  const { players, update, batch } = useStore()
   const [me] = useMe()
   const perms = usePerms()
   const inPod = useInPod()
@@ -265,6 +257,8 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
     return s
   })
   const [errors, setErrors] = useState<Errors>({})
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const tot = parseEur(total)
   const ordered = active.map((p) => p.id).filter((id) => part.includes(id))
@@ -297,23 +291,34 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
       document.querySelector(`[data-field="${firstError}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
-    // modificare una spesa = sostituire le sue righe (tengo data e "già restituito" se la quota non cambia)
-    if (entry) for (const r of entry.rows) await remove('debts', r.id)
+    // modificare una spesa = sostituire le sue righe (tengo data e "già restituito" se la quota non cambia),
+    // tutto insieme: se la connessione cade a metà non resta una spesa dimezzata
     const group_id = crypto.randomUUID()
     const group_total = Math.round(tot * 100) / 100
-    for (const id of ordered) {
-      if (id === payer) continue
-      const share = Math.round(shareOf(id) * 100) / 100
-      if (share <= 0) continue
-      const before = entry?.rows.find((r) => r.debtor_id === id)
-      await add('debts', {
-        debtor_id: id, creditor_id: payer, amount: share, description: desc.trim(),
-        settled: !!before && before.settled && before.creditor_id === payer && Math.abs(before.amount - share) < 0.005,
-        group_id, group_total,
-        ...(first ? { created_at: first.created_at } : {}),
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await batch((tx) => {
+        if (entry) for (const r of entry.rows) tx.remove('debts', r.id)
+        for (const id of ordered) {
+          if (id === payer) continue
+          const share = Math.round(shareOf(id) * 100) / 100
+          if (share <= 0) continue
+          const before = entry?.rows.find((r) => r.debtor_id === id)
+          tx.add('debts', {
+            debtor_id: id, creditor_id: payer, amount: share, description: desc.trim(),
+            settled: !!before && before.settled && before.creditor_id === payer && Math.abs(before.amount - share) < 0.005,
+            group_id, group_total,
+            ...(first ? { created_at: first.created_at } : {}),
+          })
+        }
       })
+      onClose()
+    } catch {
+      setSaveError('Non salvata: controlla la connessione e riprova.')
+    } finally {
+      setSaving(false)
     }
-    onClose()
   }
 
   const err = (k: keyof Errors) => (errors[k] ? <em className="field-error">{errors[k]}</em> : null)
@@ -396,8 +401,9 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
           </div>
         )}
 
-        <button className="primary" onClick={save}>
-          Salva
+        {saveError && <p className="small neg no-m">{saveError}</p>}
+        <button className="primary" onClick={save} disabled={saving}>
+          {saving ? 'Salvo…' : 'Salva'}
         </button>
         {entry && (
           <div className="card stack-sm">
@@ -420,8 +426,8 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
               onClose()
               await withUndo(
                 'Spesa eliminata',
-                () => Promise.all(rows.map((r) => remove('debts', r.id))),
-                () => Promise.all(rows.map(({ pod_id: _p, ...r }) => add('debts', r))),
+                () => batch((tx) => rows.forEach((r) => tx.remove('debts', r.id))),
+                () => batch((tx) => rows.forEach(({ pod_id: _p, ...r }) => tx.add('debts', r))),
               )
             }}
           >

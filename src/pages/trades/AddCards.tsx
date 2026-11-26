@@ -13,7 +13,7 @@ import { Icon } from '../../icons'
 type Draft = { key: string; name: string; qty: number; unit: number | null | undefined } // unit: undefined = in caricamento
 
 export function AddCards({ presetOther, onClose }: { presetOther?: string; onClose: () => void }) {
-  const { players, card_loans, add, update, remove } = useStore()
+  const { players, card_loans, batch } = useStore()
   const [me] = useMe()
   const inPod = useInPod()
   const [mode, setMode] = useState<'take' | 'give'>('take')
@@ -52,29 +52,28 @@ export function AddCards({ presetOther, onClose }: { presetOther?: string; onClo
     const holder = mode === 'take' ? me : other
     const now = new Date().toISOString()
     const done: { id: string; prevQty?: number }[] = []
-    await withUndo(
+    const ok = await withUndo(
       `${list.reduce((s, d) => s + d.qty, 0)} carte nel conto con ${otherName}`,
-      async () => {
-        for (const d of list) {
-          // la stessa carta già aperta nel conto: aumento le copie invece di fare un'altra riga
-          const open = card_loans.find((l) => l.status === 'open' && l.owner_player === owner && l.holder_player === holder && l.name.toLowerCase() === d.name.toLowerCase())
-          if (open) {
-            await update('card_loans', open.id, { quantity: open.quantity + d.qty })
-            done.push({ id: open.id, prevQty: open.quantity })
-          } else {
-            const row = await add('card_loans', {
-              owner_player: owner, holder_player: holder, name: d.name, quantity: d.qty, note: null, added_at: now,
-              status: 'open', closed_at: null, settlement_id: null,
-            })
-            done.push({ id: row.id })
+      () =>
+        batch((tx) => {
+          for (const d of list) {
+            // la stessa carta già aperta nel conto: aumento le copie invece di fare un'altra riga
+            const open = card_loans.find((l) => l.status === 'open' && l.owner_player === owner && l.holder_player === holder && l.name.toLowerCase() === d.name.toLowerCase())
+            if (open) {
+              tx.update('card_loans', open.id, { quantity: open.quantity + d.qty })
+              done.push({ id: open.id, prevQty: open.quantity })
+            } else {
+              const row = tx.add('card_loans', {
+                owner_player: owner, holder_player: holder, name: d.name, quantity: d.qty, note: null, added_at: now,
+                status: 'open', closed_at: null, settlement_id: null,
+              })
+              done.push({ id: row.id })
+            }
           }
-        }
-      },
-      async () => {
-        for (const d of done) d.prevQty ? await update('card_loans', d.id, { quantity: d.prevQty }) : await remove('card_loans', d.id)
-      },
+        }),
+      () => batch((tx) => done.forEach((d) => (d.prevQty ? tx.update('card_loans', d.id, { quantity: d.prevQty }) : tx.remove('card_loans', d.id)))),
     )
-    onClose()
+    if (ok) onClose()
   }
 
   const total = list.reduce((s, d) => s + (d.unit ?? 0) * d.qty, 0)

@@ -29,7 +29,7 @@ Senza configurazione i dati restano nel browser del dispositivo.
 ## 2. Database condiviso gratis (Supabase) – ~5 minuti
 
 1. Crea un account su <https://supabase.com> → **New project** (piano Free).
-2. **SQL Editor → New query**: incolla il contenuto di [`supabase/schema.sql`](supabase/schema.sql) e premi **Run**, poi fai lo stesso, in quest'ordine, con [`supabase/pods.sql`](supabase/pods.sql), [`supabase/cards.sql`](supabase/cards.sql) e [`supabase/decks.sql`](supabase/decks.sql).
+2. **SQL Editor → New query**: incolla il contenuto di [`supabase/schema.sql`](supabase/schema.sql) e premi **Run**, poi fai lo stesso, in quest'ordine, con [`supabase/pods.sql`](supabase/pods.sql), [`supabase/cards.sql`](supabase/cards.sql), [`supabase/decks.sql`](supabase/decks.sql) e [`supabase/ops.sql`](supabase/ops.sql).
    Lo script si può rieseguire: quando aggiorni l'app, rilancialo per aggiungere le nuove colonne/tabelle (crea anche i tier S, 1, 2 la prima volta).
 3. **Authentication → Sign In / Providers → Email**: per semplicità puoi disattivare *Confirm email*.
 4. **Project Settings → API**: copia *Project URL* e la chiave *anon / public*.
@@ -67,6 +67,15 @@ supabase/schema.sql  tabelle di base
 supabase/pods.sql    gruppi, ruoli, permessi (RLS)
 supabase/cards.sql   conto carte, saldi, prezzi, migrazione dei vecchi prestiti
 supabase/decks.sql   mazzi personali (legati all'account, in tutti i suoi gruppi)
+supabase/ops.sql     scritture atomiche (più modifiche insieme: tutte o nessuna)
+supabase/test/       dati e verifiche per scripts/test-sql.sh
 ```
 
 Immagini e dati delle carte da [Scryfall](https://scryfall.com). Non affiliato a Wizards of the Coast.
+
+## Test
+
+- `npm test`: logica della partita, dei conti, delle date e delle statistiche (Vitest)
+- `npm run test:sql`: installa tutti gli script SQL su un Postgres usa e getta, migra dati di prova e verifica permessi e scritture atomiche (`PGHOST`, `PGUSER`, `PGPASSWORD` come per psql; mai sul database vero)
+
+Su GitHub li lancia il workflow **Test** a ogni push.

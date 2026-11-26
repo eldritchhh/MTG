@@ -110,7 +110,7 @@ export function LocalCards() {
 }
 
 export function TierManager() {
-  const { tiers, decks, add, update, remove } = useStore()
+  const { tiers, decks, add, update, remove, batch } = useStore()
   const sorted = [...tiers].sort((a, b) => a.sort_order - b.sort_order)
   const [name, setName] = useState('')
 
@@ -118,8 +118,10 @@ export function TierManager() {
     const i = sorted.findIndex((x) => x.id === t.id)
     const other = sorted[i + dir]
     if (!other) return
-    await update('tiers', t.id, { sort_order: other.sort_order })
-    await update('tiers', other.id, { sort_order: t.sort_order })
+    await batch((tx) => {
+      tx.update('tiers', t.id, { sort_order: other.sort_order })
+      tx.update('tiers', other.id, { sort_order: t.sort_order })
+    })
   }
   async function addTier() {
     if (!name.trim()) return
