@@ -220,3 +220,29 @@ export function DeckCard({ d, owner, onClick, selected }: { d: Deck; owner?: Pla
   )
 }
 
+
+// interruttore on/off (al posto della casella per le opzioni)
+export function Switch({ checked, onChange, children, className = '' }: { checked: boolean; onChange: (on: boolean) => void; children: ReactNode; className?: string }) {
+  return (
+    <label className={`switch-row ${className}`}>
+      <span className="switch">
+        <input type="checkbox" role="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        <i />
+      </span>
+      {children}
+    </label>
+  )
+}
+
+// segnaposto mentre i dati arrivano (al posto di "Caricamento…")
+export function LoadingPage() {
+  return (
+    <div className="stack skeleton-page" aria-busy="true" aria-label="Caricamento">
+      <div className="sk sk-title" />
+      <div className="sk sk-sub" />
+      <div className="sk sk-card" />
+      <div className="sk sk-card short" />
+      <div className="sk sk-card" />
+    </div>
+  )
+}

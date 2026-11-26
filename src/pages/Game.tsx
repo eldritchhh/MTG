@@ -9,6 +9,8 @@ import { useBack } from '../lib/back'
 import { usePod } from '../lib/pod'
 import { useNav } from '../lib/nav'
 import { buzz, prefs } from '../lib/prefs'
+import { useKeepAwake } from '../lib/keepAwake'
+import { toast } from '../lib/toast'
 
 type Seat = {
   player_id: string
@@ -17,6 +19,8 @@ type Seat = {
   poison: number
   cmd: Record<string, number> // danni ricevuti dal comandante del posto i ("2") e dal suo partner ("2p")
   eliminated_order: number | null
+  energy?: number
+  exp?: number // esperienza
 }
 // Disposizioni del tavolo (il telefono sta in mezzo, i giocatori intorno):
 // sides = rettangolo, giocatori sui due lati lunghi; square = un giocatore per lato;
@@ -29,7 +33,19 @@ const LAYOUTS: { id: Layout; label: string }[] = [
   { id: 'grid', label: 'Griglia' },
 ]
 type Rot = 0 | 90 | 180 | 270
-type Live = { startedAt: string; startingLife: number; seats: Seat[]; layout?: Layout; table?: boolean }
+// turn: di chi è il turno (posto), giro n, chi ha iniziato; monarch/initiative: posto che li ha; storm: tempesta del turno
+type Turn = { seat: number; n: number; first: number }
+type Live = {
+  startedAt: string
+  startingLife: number
+  seats: Seat[]
+  layout?: Layout
+  table?: boolean
+  turn?: Turn | null
+  monarch?: number | null
+  initiative?: number | null
+  storm?: number
+}
 const layoutOf = (l: Live): Layout => l.layout ?? (l.table ? 'table' : 'grid') // partite salvate prima delle disposizioni
 
 // ultima configurazione usata: alla partita successiva gli stessi giocatori sono già selezionati
@@ -308,28 +324,48 @@ function DeckPicker({ owner, value, initialTier, onPick, onClose }: { owner: str
 }
 
 // ------------------------------------------------------------ BOARD
+// numero casuale senza bias (dadi, moneta, chi inizia)
+const rnd = (n: number) => {
+  const a = new Uint32Array(1)
+  crypto.getRandomValues(a)
+  return a[0] % n
+}
+// dove sono i danni del comandante j: uno, o due con partner/background
+const cmdSources = (j: number, deck: Deck | undefined, name: string | undefined) => [
+  { key: String(j), label: deck?.commander ?? name ?? '?' },
+  ...(deck?.partner ? [{ key: `${j}p`, label: deck.partner }] : []),
+]
+
 function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => void }) {
   const { players, decks } = useStore()
   const P = byId(players)
   const D = byId(decks)
   const [panel, setPanel] = useState<number | null>(null)
   const [menu, setMenu] = useState(false)
+  const [tools, setTools] = useState(false)
   const [ending, setEnding] = useState(false)
   const [moving, setMoving] = useState<number | null>(null) // posto tenuto premuto, da spostare
+  const [cmdFor, setCmdFor] = useState<number | null>(null) // danni da comandante rapidi: chi li riceve
+  const [flash, setFlash] = useState<number | null>(null) // "Inizia lui!"
   const elapsed = useElapsed(live.startedAt)
+  const name = (i: number) => P[live.seats[i]?.player_id]?.name ?? '?'
+  useKeepAwake(true)
   useBack(moving !== null && (() => setMoving(null)))
+  useBack(cmdFor !== null && (() => setCmdFor(null)))
   // indietro durante la partita (senza finestre aperte): apre il menu Termina / Annulla / …
-  useBack(moving === null && !menu && !ending && panel === null && (() => setMenu(true)))
+  useBack(moving === null && cmdFor === null && !menu && !tools && !ending && panel === null && (() => setMenu(true)))
 
-  // scambia due posti; i danni da comandante sono indicizzati per posto, quindi vanno rimappati
+  // scambia due posti; tutto ciò che è indicizzato per posto va rimappato (danni da comandante, turno, monarca…)
   function swap(a: number, b: number) {
     setMoving(null)
     if (a === b) return
     const map = (j: number) => (j === a ? b : j === b ? a : j)
+    const mapN = (j: number | null | undefined) => (j == null ? j : map(j))
     const remap = (k: string) => k.replace(/^\d+/, (n) => String(map(Number(n)))) // "2p" → "0p"
     const seats = live.seats.map((s) => ({ ...s, cmd: Object.fromEntries(Object.entries(s.cmd).map(([k, v]) => [remap(k), v])) }))
     ;[seats[a], seats[b]] = [seats[b], seats[a]]
-    setLive({ ...live, seats })
+    const turn = live.turn ? { ...live.turn, seat: map(live.turn.seat), first: map(live.turn.first) } : live.turn
+    setLive({ ...live, seats, turn, monarch: mapN(live.monarch), initiative: mapN(live.initiative) })
   }
 
   function change(i: number, fn: (s: Seat) => Seat) {
@@ -344,23 +380,79 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
     setLive({ ...live, seats })
   }
 
-  const tile = (i: number, rot: Rot) => (
-    <div className="cell" key={i}>
-      <SeatTile
-        idx={i}
-        seat={live.seats[i]}
-        player={P[live.seats[i].player_id]}
-        deck={D[live.seats[i].deck_id ?? '']}
-        rot={rot}
-      moving={moving}
-      onLife={(d) => change(i, (s) => ({ ...s, life: s.life + d }))}
-      onOpen={() => setPanel(i)}
-      onHold={() => setMoving(i)}
-      onDrop={(target) => target !== null && target !== i && swap(i, target)}
-        onTapWhileMoving={() => moving !== null && swap(moving, i)}
-      />
-    </div>
-  )
+  // danno da comandante: conta a parte e toglie anche vita
+  const cmdChange = (receiver: number, key: string, d: number) =>
+    change(receiver, (s) => {
+      const cur = s.cmd[key] ?? 0
+      const nv = Math.max(0, cur + d)
+      return { ...s, cmd: { ...s.cmd, [key]: nv }, life: s.life - (nv - cur) }
+    })
+
+  // turno al prossimo giocatore ancora in gioco (senso orario); il giro aumenta quando si ripassa da chi ha iniziato
+  function passTurn() {
+    const t = live.turn
+    if (!t) return
+    const n = live.seats.length
+    let next = t.seat
+    let round = t.n
+    for (let k = 1; k <= n; k++) {
+      const c = (t.seat + k) % n
+      if (c === t.first) round++
+      if (!isDead(live.seats[c])) {
+        next = c
+        break
+      }
+    }
+    buzz()
+    setLive({ ...live, turn: { ...t, seat: next, n: round }, storm: 0 })
+  }
+
+  function startFrom(i: number, random: boolean) {
+    setLive({ ...live, turn: { seat: i, n: 1, first: i }, storm: 0 })
+    setTools(false)
+    setFlash(i)
+    buzz(40)
+    if (random) toast(`Inizia ${name(i)}`)
+    window.setTimeout(() => setFlash(null), 2600)
+  }
+
+  const tile = (i: number, rot: Rot) => {
+    const src = live.seats[i]
+    const deck = D[src.deck_id ?? '']
+    const cmd =
+      cmdFor !== null && cmdFor !== i
+        ? {
+            to: name(cmdFor),
+            sources: cmdSources(i, deck, P[src.player_id]?.name).map((x) => ({ ...x, value: live.seats[cmdFor].cmd[x.key] ?? 0 })),
+            onChange: (key: string, d: number) => cmdChange(cmdFor, key, d),
+          }
+        : undefined
+    return (
+      <div className="cell" key={i}>
+        <SeatTile
+          idx={i}
+          seat={src}
+          player={P[src.player_id]}
+          deck={deck}
+          rot={rot}
+          moving={moving}
+          active={live.turn?.seat === i}
+          flash={flash === i}
+          monarch={live.monarch === i}
+          initiative={live.initiative === i}
+          cmd={cmd}
+          cmdTarget={cmdFor === i}
+          onLife={(d) => change(i, (s) => ({ ...s, life: s.life + d }))}
+          onOpen={() => setPanel(i)}
+          onCmd={() => setCmdFor(i)}
+          onCmdDone={() => setCmdFor(null)}
+          onHold={() => setMoving(i)}
+          onDrop={(target) => target !== null && target !== i && swap(i, target)}
+          onTapWhileMoving={() => moving !== null && swap(moving, i)}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="board">
@@ -368,15 +460,37 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
         <span className="timer">
           <Icon name="clock" size={16} /> {elapsed}
         </span>
-        <span className="board-title">{moving !== null ? `Sposta ${P[live.seats[moving].player_id]?.name ?? ''}: tocca il nuovo posto` : 'Partita'}</span>
         {moving !== null ? (
-          <button className="icon-btn" onClick={() => setMoving(null)} aria-label="Annulla spostamento">
-            <Icon name="x" size={20} />
+          <span className="board-title">Sposta {name(moving)}: tocca il nuovo posto</span>
+        ) : cmdFor !== null ? (
+          <span className="board-title">Danni da comandante a {name(cmdFor)}</span>
+        ) : live.turn ? (
+          <button className="turn-btn" onClick={passTurn} aria-label="Passa il turno">
+            <span className="turn-n">Turno {live.turn.n}</span>
+            <b>{name(live.turn.seat)}</b>
+            {(live.storm ?? 0) > 0 && (
+              <span className="storm">
+                <Icon name="storm" size={13} /> {live.storm}
+              </span>
+            )}
+            <span className="turn-pass">Passa ›</span>
           </button>
         ) : (
-          <button className="icon-btn" onClick={() => setMenu(true)} aria-label="Menu">
-            <Icon name="menu" size={20} />
+          <span className="board-title">Partita</span>
+        )}
+        {moving !== null || cmdFor !== null ? (
+          <button className="icon-btn done-btn" onClick={() => (moving !== null ? setMoving(null) : setCmdFor(null))} aria-label={moving !== null ? 'Annulla spostamento' : 'Fatto'}>
+            <Icon name={moving !== null ? 'x' : 'check'} size={20} />
           </button>
+        ) : (
+          <span className="row gap6">
+            <button className="icon-btn" onClick={() => setTools(true)} aria-label="Strumenti: chi inizia, dadi, monarca">
+              <Icon name="dice" size={20} />
+            </button>
+            <button className="icon-btn" onClick={() => setMenu(true)} aria-label="Menu">
+              <Icon name="menu" size={20} />
+            </button>
+          </span>
         )}
       </div>
       <Seats layout={layoutOf(live)} n={live.seats.length} tile={tile} />
@@ -391,6 +505,8 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
           change={(fn) => change(panel, fn)}
         />
       )}
+
+      {tools && <TableTools live={live} name={name} setLive={setLive} onStart={startFrom} onPass={passTurn} onClose={() => setTools(false)} />}
 
       {menu && (
         <Modal title="Partita" onClose={() => setMenu(false)}>
@@ -414,11 +530,21 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
                 }}
               />
             </div>
-            <p className="muted small no-m">Per cambiare posto: tieni premuto un giocatore e trascinalo sul nuovo posto (o rilascia e tocca il posto).</p>
+            <p className="muted small no-m">
+              Per cambiare posto: tieni premuto un giocatore e trascinalo sul nuovo posto (o rilascia e tocca il posto). Per i danni da comandante tocca la spada sotto chi li riceve.
+            </p>
             <button
               onClick={async () => {
                 if (!(await ask('Riportare tutti ai punti vita iniziali?'))) return
-                setLive({ ...live, startedAt: new Date().toISOString(), seats: live.seats.map((s) => ({ ...s, life: live.startingLife, poison: 0, cmd: {}, eliminated_order: null })) })
+                setLive({
+                  ...live,
+                  startedAt: new Date().toISOString(),
+                  turn: null,
+                  monarch: null,
+                  initiative: null,
+                  storm: 0,
+                  seats: live.seats.map((s) => ({ ...s, life: live.startingLife, poison: 0, energy: 0, exp: 0, cmd: {}, eliminated_order: null })),
+                })
                 setMenu(false)
               }}
             >
@@ -438,6 +564,103 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
 
       {ending && <EndGame live={live} P={P} D={D} onClose={() => setEnding(false)} onSaved={() => setLive(null)} />}
     </div>
+  )
+}
+
+// Strumenti del tavolo: chi inizia, turni, dadi e moneta, monarca, iniziativa, tempesta
+function TableTools({
+  live, name, setLive, onStart, onPass, onClose,
+}: {
+  live: Live
+  name: (i: number) => string
+  setLive: (l: Live) => void
+  onStart: (seat: number, random: boolean) => void
+  onPass: () => void
+  onClose: () => void
+}) {
+  const [roll, setRoll] = useState<{ what: string; value: string; k: number } | null>(null)
+  const seats = live.seats.map((_, i) => i)
+  const alive = seats.filter((i) => !isDead(live.seats[i]))
+  const throwIt = (what: string, value: string) => {
+    buzz(30)
+    setRoll((r) => ({ what, value, k: (r?.k ?? 0) + 1 }))
+  }
+  const toggle = (k: 'monarch' | 'initiative', i: number) => setLive({ ...live, [k]: live[k] === i ? null : i })
+  const chips = (on: (i: number) => boolean, click: (i: number) => void) => (
+    <div className="chips">
+      {seats.map((i) => (
+        <button key={i} className={`chip ${on(i) ? 'on' : ''}`} aria-pressed={on(i)} onClick={() => click(i)}>
+          {name(i)}
+        </button>
+      ))}
+    </div>
+  )
+
+  return (
+    <Modal title="Strumenti" onClose={onClose}>
+      <div className="stack">
+        <div className="stack-sm">
+          <h3 className="no-m">Chi inizia?</h3>
+          <button className="primary" disabled={!alive.length} onClick={() => onStart(alive[rnd(alive.length)], true)}>
+            <Icon name="dice" size={18} /> Estrai chi inizia
+          </button>
+          <p className="muted small no-m">Oppure tocca chi inizia: poi il turno passa in senso orario.</p>
+          {chips((i) => live.turn?.first === i, (i) => onStart(i, false))}
+        </div>
+
+        {live.turn && (
+          <div className="card row between">
+            <span>
+              Turno {live.turn.n} · tocca a <b>{name(live.turn.seat)}</b>
+            </span>
+            <span className="row gap6">
+              <button className="small-btn" onClick={onPass}>
+                Passa ›
+              </button>
+              <button className="icon-btn sm" onClick={() => setLive({ ...live, turn: null })} aria-label="Smetti di contare i turni">
+                <Icon name="x" size={14} />
+              </button>
+            </span>
+          </div>
+        )}
+
+        <div className="stack-sm">
+          <h3 className="no-m">Dadi e moneta</h3>
+          <div className="row gap6 dice-row">
+            <button onClick={() => throwIt('Moneta', rnd(2) ? 'Testa' : 'Croce')}>
+              <Icon name="coin" size={18} /> Moneta
+            </button>
+            <button onClick={() => throwIt('d6', String(rnd(6) + 1))}>d6</button>
+            <button onClick={() => throwIt('d20', String(rnd(20) + 1))}>d20</button>
+          </div>
+          {roll && (
+            <div className="roll" key={roll.k}>
+              <span className="muted small">{roll.what}</span>
+              <b>{roll.value}</b>
+            </div>
+          )}
+        </div>
+
+        <div className="stack-sm">
+          <h3 className="no-m">
+            <Icon name="crown" size={14} /> Monarca
+          </h3>
+          {chips((i) => live.monarch === i, (i) => toggle('monarch', i))}
+        </div>
+        <div className="stack-sm">
+          <h3 className="no-m">
+            <Icon name="door" size={14} /> Iniziativa
+          </h3>
+          {chips((i) => live.initiative === i, (i) => toggle('initiative', i))}
+        </div>
+        <div className="row between line">
+          <span className="row">
+            <Icon name="storm" size={16} /> Tempesta <span className="muted small">(si azzera a ogni turno)</span>
+          </span>
+          <Stepper value={live.storm ?? 0} onChange={(d) => setLive({ ...live, storm: Math.max(0, (live.storm ?? 0) + d) })} />
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -537,8 +760,11 @@ function LayoutIcon({ layout }: { layout: Layout }) {
 
 const HOLD_MS = 450
 
+type CmdDial = { to: string; sources: { key: string; label: string; value: number }[]; onChange: (key: string, d: number) => void }
+
 function SeatTile({
-  idx, seat, player, deck, rot, moving, onLife, onOpen, onHold, onDrop, onTapWhileMoving,
+  idx, seat, player, deck, rot, moving, active, flash, monarch, initiative, cmd, cmdTarget,
+  onLife, onOpen, onCmd, onCmdDone, onHold, onDrop, onTapWhileMoving,
 }: {
   idx: number
   seat: Seat
@@ -546,8 +772,16 @@ function SeatTile({
   deck?: Deck
   rot: Rot
   moving: number | null
+  active: boolean
+  flash: boolean
+  monarch: boolean
+  initiative: boolean
+  cmd?: CmdDial // modalità danni da comandante: questo posto è una fonte
+  cmdTarget: boolean // modalità danni da comandante: questo posto li riceve
   onLife: (d: number) => void
   onOpen: () => void
+  onCmd: () => void
+  onCmdDone: () => void
   onHold: () => void
   onDrop: (target: number | null) => void
   onTapWhileMoving: () => void
@@ -559,6 +793,7 @@ function SeatTile({
   const dead = isDead(seat)
   const cmdTotal = Object.values(seat.cmd).reduce((a, b) => a + b, 0)
   const arts = deckArts(deck)
+  const holdable = !cmd && !cmdTarget
 
   // tieni premuto → posto "in mano": trascina e rilascia su un altro posto, oppure rilascia e tocca il posto
   const cancelHold = () => {
@@ -569,6 +804,7 @@ function SeatTile({
     onPointerDown: (e: React.PointerEvent) => {
       held.current = false
       cancelHold()
+      if (!holdable) return
       const t = window.setTimeout(() => {
         held.current = true
         navigator.vibrate?.(30)
@@ -606,10 +842,11 @@ function SeatTile({
     timer.current = window.setTimeout(() => setDelta(0), 1500)
   }
 
+  const cls = ['seat', `r${rot}`, dead && 'dead', moving === idx ? 'moving' : moving !== null && 'drop-target', active && 'active', flash && 'flash', cmd && 'cmd-source', cmdTarget && 'cmd-target']
   return (
     <div
       data-seat={idx}
-      className={`seat r${rot} ${dead ? 'dead' : ''} ${moving === idx ? 'moving' : moving !== null ? 'drop-target' : ''}`}
+      className={cls.filter(Boolean).join(' ')}
       style={{
         ['--pc' as string]: player?.color ?? '#555',
         backgroundImage: arts.length
@@ -619,39 +856,104 @@ function SeatTile({
       {...hold}
     >
       {arts.length > 0 && <SplitArt urls={arts} className="seat-art" />}
-      <button className="zone minus" onClick={() => bump(-1)} aria-label="-1">
-        −
-      </button>
-      <button className="zone plus" onClick={() => bump(1)} aria-label="+1">
-        +
-      </button>
+      {!cmd && !cmdTarget && (
+        <>
+          <button className="zone minus" onClick={() => bump(-1)} aria-label={`${player?.name ?? ''} −1`}>
+            −
+          </button>
+          <button className="zone plus" onClick={() => bump(1)} aria-label={`${player?.name ?? ''} +1`}>
+            +
+          </button>
+        </>
+      )}
       <div className="seat-info">
         <div className="seat-name">{player?.name ?? '?'}</div>
-        <div className="seat-deck">
-          {deck && <Pips colors={deck.colors} size={12} />} {deck ? deckLabel(deck) : ''}
+        {!cmd && (
+          <div className="seat-deck">
+            {deck && <Pips colors={deck.colors} size={12} />} {deck ? deckLabel(deck) : ''}
+          </div>
+        )}
+      </div>
+      {!cmd && (monarch || initiative || !!seat.energy || !!seat.exp) && (
+          <div className="seat-badges">
+            {monarch && (
+              <span className="sbadge gold" title="Monarca">
+                <Icon name="crown" size={13} />
+              </span>
+            )}
+            {initiative && (
+              <span className="sbadge" title="Iniziativa">
+                <Icon name="door" size={13} />
+              </span>
+            )}
+            {!!seat.energy && (
+              <span className="sbadge" title="Energia">
+                <Icon name="bolt" size={12} /> {seat.energy}
+              </span>
+            )}
+            {!!seat.exp && (
+              <span className="sbadge" title="Esperienza">
+                <Icon name="star" size={12} /> {seat.exp}
+              </span>
+            )}
+          </div>
+      )}
+
+      {cmd ? (
+        // fonte dei danni: un contatore per comandante (due con partner), girato verso chi lo usa
+        <div className="cmd-dials">
+          {cmd.sources.map((x) => (
+            <div key={x.key} className="cmd-dial">
+              <button className="cmd-btn" onClick={() => cmd.onChange(x.key, -1)} aria-label={`${x.label}: un danno in meno a ${cmd.to}`}>
+                −
+              </button>
+              <div className="cmd-val">
+                <div className="cmd-label">{x.label}</div>
+                <div className={`cmd-num ${x.value >= 21 ? 'neg' : ''}`}>{x.value}</div>
+              </div>
+              <button className="cmd-btn" onClick={() => cmd.onChange(x.key, 1)} aria-label={`${x.label}: un danno in più a ${cmd.to}`}>
+                +
+              </button>
+            </div>
+          ))}
+          <div className="cmd-caption">danni a {cmd.to}</div>
         </div>
-      </div>
-      <div className="life">
-        {seat.life}
-        {delta !== 0 && <span className={`delta ${delta > 0 ? 'pos' : 'neg'}`}>{delta > 0 ? `+${delta}` : delta}</span>}
-      </div>
-      {dead && (
+      ) : (
+        <div className="life">
+          {seat.life}
+          {delta !== 0 && <span className={`delta ${delta > 0 ? 'pos' : 'neg'}`}>{delta > 0 ? `+${delta}` : delta}</span>}
+        </div>
+      )}
+      {dead && !cmd && (
         <div className="out-badge">
           <Icon name="skull" size={14} /> Eliminato
         </div>
       )}
-      <div className="seat-bottom">
-        <button className="mini" onClick={() => bump(-5)}>
-          −5
+      {flash && <div className="start-badge">Inizia!</div>}
+      {cmdTarget ? (
+        <button className="cmd-done" onClick={onCmdDone}>
+          <Icon name="sword" size={14} /> {cmdTotal} ricevuti · Fatto
         </button>
-        <button className="mini counters" onClick={onOpen}>
-          <Icon name="sword" size={14} /> {cmdTotal}
-          <Icon name="drop" size={14} /> {seat.poison}
-        </button>
-        <button className="mini" onClick={() => bump(5)}>
-          +5
-        </button>
-      </div>
+      ) : (
+        !cmd && (
+          <div className="seat-bottom">
+            <button className="mini" onClick={() => bump(-5)}>
+              −5
+            </button>
+            <span className="mini-pair">
+              <button className="mini" onClick={onCmd} aria-label={`Danni da comandante a ${player?.name ?? ''}`}>
+                <Icon name="sword" size={14} /> {cmdTotal}
+              </button>
+              <button className="mini" onClick={onOpen} aria-label={`Altri contatori di ${player?.name ?? ''}`}>
+                <Icon name="drop" size={14} /> {seat.poison}
+              </button>
+            </span>
+            <button className="mini" onClick={() => bump(5)}>
+              +5
+            </button>
+          </div>
+        )
+      )}
     </div>
   )
 }
@@ -707,6 +1009,19 @@ function CounterPanel({ live, idx, P, D, onClose, change }: { live: Live; idx: n
             <Icon name="drop" size={16} /> Veleno (10 = fuori)
           </span>
           <Stepper value={seat.poison} danger={seat.poison >= 10} onChange={(d) => change((s) => ({ ...s, poison: Math.max(0, s.poison + d) }))} />
+        </div>
+        <h3>Altri segnalini</h3>
+        <div className="row between line">
+          <span className="row">
+            <Icon name="bolt" size={16} /> Energia
+          </span>
+          <Stepper value={seat.energy ?? 0} onChange={(d) => change((s) => ({ ...s, energy: Math.max(0, (s.energy ?? 0) + d) }))} />
+        </div>
+        <div className="row between line">
+          <span className="row">
+            <Icon name="star" size={16} /> Esperienza
+          </span>
+          <Stepper value={seat.exp ?? 0} onChange={(d) => change((s) => ({ ...s, exp: Math.max(0, (s.exp ?? 0) + d) }))} />
         </div>
         <h3>Punti vita</h3>
         <div className="row between line">

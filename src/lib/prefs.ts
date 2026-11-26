@@ -21,6 +21,12 @@ export const prefs = {
   set vibration(on: boolean) {
     write('mtg:pref-vibration', on ? '1' : '0')
   },
+  get keepAwake() {
+    return read('mtg:pref-awake') !== '0'
+  },
+  set keepAwake(on: boolean) {
+    write('mtg:pref-awake', on ? '1' : '0')
+  },
   get startingLife() {
     return Number(read('mtg:pref-life')) || 40
   },

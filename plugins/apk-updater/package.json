@@ -2,7 +2,7 @@
   "name": "mtg-apk-updater",
   "version": "1.0.0",
   "private": true,
-  "description": "Plugin Capacitor dell'app: scarica l'APK di un aggiornamento e apre l'installer di Android",
+  "description": "Plugin nativi dell'app (Android): aggiornamento dall'app e schermo sempre acceso in partita",
   "main": "index.js",
   "capacitor": {
     "android": {

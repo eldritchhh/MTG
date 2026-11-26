@@ -2,8 +2,8 @@
 import { useMemo, useState } from 'react'
 import { useMe, useStore } from '../lib/store'
 import type { Debt, Player } from '../lib/types'
-import { byId, dateIt, eur, netBalances, parseEur, playerName, settlements } from '../lib/util'
-import { Avatar, Empty, Header, Modal, Segmented } from '../components'
+import { byId, dayIt, eur, netBalances, parseEur, playerName, settlements } from '../lib/util'
+import { Avatar, Empty, Header, Modal, Segmented, Switch } from '../components'
 import { Icon } from '../icons'
 import { useInPod, usePerms } from '../lib/pod'
 import { useNav } from '../lib/nav'
@@ -140,13 +140,9 @@ function Money() {
           </button>
         )}
       </div>
-      <label className="switch-row small muted">
-        <span className="switch">
-          <input type="checkbox" role="switch" checked={showSettled} onChange={(e) => setShowSettled(e.target.checked)} />
-          <i />
-        </span>
+      <Switch className="small muted" checked={showSettled} onChange={setShowSettled}>
         Mostra saldati
-      </label>
+      </Switch>
       {entries.length === 0 &&
         (players.length < 2 ? (
           <Empty icon="coin" action={{ label: 'Vai a Giocatori', run: () => nav.setTab('players') }}>
@@ -171,7 +167,7 @@ function Money() {
                   <b>{playerName(P, e.rows[0].debtor_id)}</b> deve a <b>{playerName(P, e.rows[0].creditor_id)}</b>
                 </div>
                 <div className="muted small">
-                  <Icon name="cards" size={12} /> {e.rows[0].description || 'Saldo carte'} · {dateIt(e.rows[0].created_at)}
+                  <Icon name="cards" size={12} /> {e.rows[0].description || 'Saldo carte'} · {dayIt(e.rows[0].created_at)}
                 </div>
               </div>
               <div className="strong">{eur(e.rows[0].amount)}</div>
@@ -184,7 +180,7 @@ function Money() {
                   <span className="strong">{eur(groupTotal(e.rows))}</span>
                 </div>
                 <div className="muted small">
-                  pagato da {playerName(P, e.rows[0].creditor_id)} · {people(e.rows)} · {dateIt(e.rows[0].created_at)}
+                  pagato da {playerName(P, e.rows[0].creditor_id)} · {people(e.rows, P)} · {dayIt(e.rows[0].created_at)}
                 </div>
                 <div className="share-chips">
                   {e.rows.map((r) => (
@@ -222,9 +218,11 @@ function toEntries(debts: Debt[]): Entry[] {
 const groupTotal = (rows: Debt[]) => rows[0].group_total ?? rows.reduce((s, r) => s + r.amount, 0)
 // chi ha pagato è nella divisione se il totale supera la somma delle quote degli altri
 const payerIncluded = (rows: Debt[]) => Math.abs(groupTotal(rows) - rows.reduce((s, r) => s + r.amount, 0)) > 0.004
-const people = (rows: Debt[]) => {
+// "per Luca" se la spesa è per una persona sola (non chi ha pagato), altrimenti "4 persone"
+const people = (rows: Debt[], P: Record<string, Player>) => {
+  if (rows.length === 1 && !payerIncluded(rows)) return `per ${playerName(P, rows[0].debtor_id)}`
   const n = rows.length + (payerIncluded(rows) ? 1 : 0)
-  return `${n} person${n === 1 ? 'a' : 'e'}`
+  return `${n} persone`
 }
 
 // divide in centesimi senza perdere arrotondamenti (i centesimi in più vanno ai primi)
@@ -375,21 +373,16 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
 
         {ordered.length > 1 && tot > 0 && (
           <div className="card split-box">
-            <label className="switch-row small">
-              <span className="switch">
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={custom}
-                  onChange={(e) => {
-                    setCustom(e.target.checked)
-                    if (e.target.checked) setShares(Object.fromEntries(ordered.map((id, i) => [id, fmtEur(equal[i] ?? 0)])))
-                  }}
-                />
-                <i />
-              </span>
+            <Switch
+              className="small"
+              checked={custom}
+              onChange={(on) => {
+                setCustom(on)
+                if (on) setShares(Object.fromEntries(ordered.map((id, i) => [id, fmtEur(equal[i] ?? 0)])))
+              }}
+            >
               Importi diversi
-            </label>
+            </Switch>
             {custom &&
               ordered.map((id) => (
                 <div key={id} className="row between line">

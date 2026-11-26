@@ -23,6 +23,11 @@ const P: Record<string, string> = {
   users: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c0-3.5 2.9-5.5 6.5-5.5s6.5 2 6.5 5.5M16 4.3a3.5 3.5 0 0 1 0 6.4M18 14.8c2 .7 3.5 2.4 3.5 5.2',
   edit: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4',
   tag: 'M3 12V4h8l9.5 9.5-8 8L3 12zM7.5 8.5h.01',
+  crown: 'M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z',
+  door: 'M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M3 21h18M14.5 12.5h.01',
+  bolt: 'M13 3L5 14h6l-1 7 8-11h-6l1-7z',
+  star: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9L12 3.5z',
+  storm: 'M7 15a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.3 1.5A3.8 3.8 0 0 1 17 15M12.5 12l-2 4h3l-2 4',
 }
 
 export function Icon({ name, size = 20, className = '' }: { name: keyof typeof P | string; size?: number; className?: string }) {

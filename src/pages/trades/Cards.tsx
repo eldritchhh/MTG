@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react'
 import { useMe, useStore } from '../../lib/store'
 import type { CardLoan } from '../../lib/types'
-import { accounts, copies, held, markSeen, newCount, sum, valueNow } from '../../lib/cards'
+import { accounts, approx, copies, held, markSeen, newCount, sum, valueNow } from '../../lib/cards'
 import { eurCents, STALE } from '../../lib/prices'
-import { dateIt, eur } from '../../lib/util'
+import { dayIt, sinceIt, eur } from '../../lib/util'
 import { Avatar, Empty, Modal, Screen } from '../../components'
 import { usePod, usePerms } from '../../lib/pod'
 import { withUndo } from '../../lib/toast'
@@ -41,12 +41,12 @@ export function CardsTab() {
         <div className="card summary">
           <div className="muted small">Hai carte di altri</div>
           <div className="big">{copies(theirs)}</div>
-          <div className="muted small">~{eur(theirsVal.cents / 100)}{theirsVal.missing ? ` · ${theirsVal.missing} senza prezzo` : ''}</div>
+          <div className="muted small">{approx(theirsVal)}{theirsVal.missing && theirsVal.cents ? ` · ${theirsVal.missing} senza prezzo` : ''}</div>
         </div>
         <div className="card summary">
           <div className="muted small">Tue carte in giro</div>
           <div className="big">{copies(mine)}</div>
-          <div className="muted small">~{eur(mineVal.cents / 100)}{mineVal.missing ? ` · ${mineVal.missing} senza prezzo` : ''}</div>
+          <div className="muted small">{approx(mineVal)}{mineVal.missing && mineVal.cents ? ` · ${mineVal.missing} senza prezzo` : ''}</div>
         </div>
       </div>
       <p className="muted small no-m">
@@ -54,7 +54,7 @@ export function CardsTab() {
         {age && (
           <span className={Date.now() - age > STALE ? 'neg' : ''}>
             {' '}
-            {Date.now() - age > STALE ? 'Prezzi non aggiornati' : 'Valori Cardmarket via Scryfall'} · {dateIt(new Date(age).toISOString())}
+            {Date.now() - age > STALE ? 'Prezzi non aggiornati' : 'Valori Cardmarket via Scryfall'} · {dayIt(new Date(age).toISOString())}
           </span>
         )}
       </p>
@@ -87,8 +87,8 @@ export function CardsTab() {
                 <Icon name="chevron" size={16} className="muted" />
               </div>
               <div className="account-boxes">
-                <span className="account-box">{t.length ? `Hai ${copies(t)} sue · ~${eur(tv.cents / 100)}` : 'Nessuna sua'}</span>
-                <span className="account-box">{m.length ? `Ha ${copies(m)} tue · ~${eur(mv.cents / 100)}` : 'Nessuna tua'}</span>
+                <span className="account-box">{t.length ? `Hai ${copies(t)} sue · ${approx(tv)}` : 'Nessuna sua'}</span>
+                <span className="account-box">{m.length ? `Ha ${copies(m)} tue · ${approx(mv)}` : 'Nessuna tua'}</span>
               </div>
             </button>
           )
@@ -178,7 +178,7 @@ function ContoScreen({ other, onClose }: { other: string; onClose: () => void })
         <div className="row between">
           <h3 className="no-m">{title}</h3>
           <span className="muted small">
-            {copies(ls)} · ~{eur(v.cents / 100)}
+            {copies(ls)} · {approx(v)}
           </span>
         </div>
         {ls.length === 0 && <p className="muted small no-m">Nessuna.</p>}
@@ -197,7 +197,7 @@ function ContoScreen({ other, onClose }: { other: string; onClose: () => void })
                 )}
                 <span className="grow">
                   <CardName name={l.name} qty={l.quantity} value={valueNow(l, prices)} />
-                  <span className="muted small"> · dal {dateIt(l.added_at)}</span>
+                  <span className="muted small"> · {sinceIt(l.added_at)}</span>
                 </span>
                 <span className="small nowrap">{eurCents(valueNow(l, prices))}</span>
               </div>
@@ -248,7 +248,7 @@ function ContoScreen({ other, onClose }: { other: string; onClose: () => void })
           <span className="grow small">
             <b>{selected.reduce((s, [, q]) => s + q, 0)} selezionate</b> ·{' '}
             {!mixed
-              ? `~${eur(selVal.cents / 100)}`
+              ? approx(selVal)
               : net === 0
                 ? 'in pari'
                 : `differenza ~${eur(Math.abs(net) / 100)} ${net > 0 ? `a favore di ${o?.name ?? ''}` : 'a tuo favore'}`}
@@ -292,7 +292,7 @@ function HistoryModal({ other, onClose }: { other?: string; onClose: () => void 
         <span className="grow small">
           <CardName name={l.name} qty={l.quantity} /> <span className="muted">di {name(l.owner_player)}, restituita da {name(l.holder_player)}</span>
         </span>
-        <span className="muted small nowrap">{dateIt(l.closed_at ?? l.added_at)}</span>
+        <span className="muted small nowrap">{dayIt(l.closed_at ?? l.added_at)}</span>
       </div>
     ) })),
     ...sets.map((s) => ({ at: s.created_at, el: (
@@ -302,7 +302,7 @@ function HistoryModal({ other, onClose }: { other?: string; onClose: () => void 
             Saldo {name(s.player_a)} ↔ {name(s.player_b)}
             {s.imported && <span className="muted"> · importato</span>}
           </div>
-          <div className="muted small">{dateIt(s.created_at)}{s.note ? ` · ${s.note}` : ''}</div>
+          <div className="muted small">{dayIt(s.created_at)}{s.note ? ` · ${s.note}` : ''}</div>
         </div>
         <Icon name="chevron" size={16} className="muted" />
       </button>

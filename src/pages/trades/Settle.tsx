@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useMe, useStore } from '../../lib/store'
 import type { CardLoan, SettlementItem } from '../../lib/types'
-import { centsToInput, dateIt, eur, parseEur } from '../../lib/util'
+import { centsToInput, dayIt, eur, parseEur } from '../../lib/util'
 import { eurCents, loadPrices, priceNow } from '../../lib/prices'
 import { held } from '../../lib/cards'
 import { Modal, Segmented } from '../../components'
@@ -308,7 +308,7 @@ export function SettlementDetail({ id, onClose }: { id: string; onClose: () => v
     <Modal title={`Saldo ${name(s.player_a)} ↔ ${name(s.player_b)}`} onClose={onClose}>
       <div className="stack">
         <p className="muted small no-m">
-          {dateIt(s.created_at)}
+          {dayIt(s.created_at)}
           {s.imported && ' · importato dai vecchi prestiti'}
           {s.note && ` · ${s.note}`}
         </p>

@@ -13,8 +13,30 @@ export function parseEur(s: string) {
 
 export const centsToInput = (c: number | null | undefined) => (c == null ? '' : (c / 100).toFixed(2).replace('.', ','))
 
-export const dateIt = (iso: string) =>
-  new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })
+// Date brevi: "24 nov" (l'anno solo se non è quello in corso)
+export const dateIt = (iso: string) => {
+  const d = new Date(iso)
+  const year = d.getFullYear() !== new Date().getFullYear()
+  return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) })
+}
+// giorni di calendario fino a oggi (0 = oggi, 1 = ieri)
+const daysAgo = (iso: string) => {
+  const d = new Date(iso)
+  const t = new Date()
+  return Math.round((new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000)
+}
+// nelle liste: "oggi", "ieri", "24 nov"
+export const dayIt = (iso: string) => ({ 0: 'oggi', 1: 'ieri' })[daysAgo(iso)] ?? dateIt(iso)
+// "del 24 nov", "dall'8 nov", "all'11 dic": preposizione articolata con l'elisione davanti a 8 e 11
+export const onDate = (p: 'dal' | 'al' | 'del', iso: string) => {
+  const s = dateIt(iso)
+  return /^(8|11)\b/.test(s) ? `${p}l'${s}` : `${p} ${s}`
+}
+// "da oggi", "da ieri", "dal 24 nov"
+export const sinceIt = (iso: string) => {
+  const n = daysAgo(iso)
+  return n === 0 ? 'da oggi' : n === 1 ? 'da ieri' : onDate('dal', iso)
+}
 
 export const byId = <T extends { id: string }>(rows: T[]) => Object.fromEntries(rows.map((r) => [r.id, r])) as Record<string, T>
 

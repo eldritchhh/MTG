@@ -3,7 +3,7 @@ import { useMe, useStore } from '../lib/store'
 import { cardListInfo, commanderListInfo, updateCardList, updateCommanderList } from '../lib/scryfall'
 import { APP_VERSION, isNewer, latestRelease, type Release } from '../lib/version'
 import { canSelfUpdate, useSelfUpdate } from '../lib/updater'
-import { PLAYER_COLORS, dateIt } from '../lib/util'
+import { PLAYER_COLORS, onDate } from '../lib/util'
 import type { Tier } from '../lib/types'
 import { isCloud } from '../lib/supabase'
 import { TABLES } from '../lib/types'
@@ -287,7 +287,7 @@ export function CommanderList() {
       noun="comandanti"
       load={commanderListInfo}
       update={updateCommanderList}
-      describe={(i) => `${it(i.count)} comandanti e background, aggiornati al ${dateIt(i.updated)}. La ricerca funziona offline, anche per nome italiano.`}
+      describe={(i) => `${it(i.count)} comandanti e background, aggiornati ${onDate('al', i.updated)}. La ricerca funziona offline, anche per nome italiano.`}
     />
   )
 }
@@ -300,7 +300,7 @@ export function CardNamesList() {
       noun="carte"
       load={cardListInfo}
       update={updateCardList}
-      describe={(i) => `${it(i.count)} carte, ${it(i.italian ?? 0)} con il nome italiano, aggiornate al ${dateIt(i.updated)}. La ricerca negli scambi funziona offline.`}
+      describe={(i) => `${it(i.count)} carte, ${it(i.italian ?? 0)} con il nome italiano, aggiornate ${onDate('al', i.updated)}. La ricerca negli scambi funziona offline.`}
     />
   )
 }

@@ -505,3 +505,53 @@ button.card-link { cursor: pointer; }
 /* gruppo di campi disattivabile (mazzo personale di un altro) */
 .plain-fs { border: 0; padding: 0; margin: 0; min-width: 0; }
 .plain-fs:disabled { opacity: 0.6; }
+
+/* ---------- partita: turni, strumenti, danni da comandante rapidi ---------- */
+.board-top { gap: 8px; }
+.board-top .board-title { flex: 1; text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-btn { flex: 1; min-width: 0; justify-content: center; gap: 8px; padding: 0.35rem 0.8rem; border-radius: 999px; background: #d9b45a1a; border-color: #d9b45a55; color: #f5df9c; font-size: 0.85rem; white-space: nowrap; }
+.turn-btn b { overflow: hidden; text-overflow: ellipsis; }
+.turn-n { color: var(--muted); font-weight: 600; }
+.turn-pass { font-weight: 800; color: var(--gold); }
+.storm { display: inline-flex; align-items: center; gap: 3px; color: #cfc8de; }
+.done-btn { background: var(--gold); color: #1a1405; border-color: var(--gold); }
+.seat.active { border-color: var(--gold); box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 40px #d9b45a33, 0 0 22px #d9b45a55; }
+.seat.flash { animation: seat-flash 0.6s ease-in-out 4 alternate; }
+@keyframes seat-flash { from { filter: brightness(1); } to { filter: brightness(1.6); } }
+.start-badge { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 4; background: var(--gold); color: #1a1405; font-weight: 800; font-size: 1.3rem; padding: 0.4rem 1.2rem; border-radius: 999px; box-shadow: 0 6px 24px #000a; pointer-events: none; }
+.seat-badges { position: absolute; top: 10px; left: 10px; z-index: 2; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none; }
+.sbadge { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; font-weight: 700; background: #000b; border: 1px solid #ffffff24; border-radius: 999px; padding: 2px 7px; color: #e5dff0; }
+.sbadge.gold { color: var(--gold); border-color: #d9b45a66; }
+.mini-pair { display: flex; gap: 4px; }
+.mini-pair .mini { gap: 4px; color: #ddd; }
+/* fonte dei danni da comandante: contatori grandi al posto della vita */
+.seat.cmd-source { border-style: dashed; }
+.cmd-dials { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 46px 10px 8px; align-items: stretch; justify-content: center; flex: 1; min-height: 0; }
+.cmd-dial { display: flex; align-items: center; gap: 6px; min-height: 0; }
+.cmd-btn { flex: none; width: clamp(40px, 22cqmin, 72px); height: clamp(40px, 22cqmin, 72px); border-radius: 16px; font-size: 1.6rem; font-weight: 600; background: #000a; border-color: #ffffff26; padding: 0; }
+.cmd-val { flex: 1; min-width: 0; text-align: center; }
+.cmd-label { font-size: 0.7rem; color: #e5dff0cc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmd-num { font-size: clamp(1.6rem, 20cqmin, 3.6rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 3px 16px #000c; }
+.cmd-caption { text-align: center; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+.seat.cmd-target { border-color: var(--gold); box-shadow: inset 0 0 0 2px var(--gold); }
+.cmd-done { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 3; background: var(--gold); color: #1a1405; border-color: var(--gold); border-radius: 999px; font-weight: 800; font-size: 0.85rem; padding: 0.4rem 0.9rem; gap: 6px; white-space: nowrap; }
+/* strumenti */
+.dice-row button { flex: 1; }
+.roll { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px; border-radius: 14px; background: var(--bg3); border: 1px solid var(--line2); animation: roll-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.roll b { font-size: 2.4rem; line-height: 1.1; color: var(--gold); }
+@keyframes roll-in { from { transform: scale(0.6) rotate(-12deg); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---------- segnaposto di caricamento ---------- */
+.skeleton-page { padding: 16px; }
+.sk { border-radius: 14px; background: linear-gradient(90deg, var(--bg3) 0%, #2a2536 50%, var(--bg3) 100%); background-size: 200% 100%; animation: sk-shimmer 1.3s linear infinite; }
+.sk-title { height: 34px; width: 55%; }
+.sk-sub { height: 14px; width: 35%; margin-top: -6px; }
+.sk-card { height: 120px; }
+.sk-card.short { height: 70px; }
+@keyframes sk-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .sk, .seat.flash, .roll, .seat.moving { animation: none; }
+}
+/* statistiche: % e differenza dall'atteso */
+.trow .pct { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.trow .pct small { font-size: 0.68rem; font-weight: 700; }

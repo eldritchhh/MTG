@@ -3,6 +3,7 @@
 // - si chiude restituendola (returned) o saldandola (settled, dentro un Settlement)
 // - valore: le righe aperte mostrano il prezzo di oggi; al saldo il valore si congela
 import type { CardLoan } from './types'
+import { eur } from './util'
 import type { Price } from './prices'
 
 export const isOpen = (l: CardLoan) => l.status === 'open'
@@ -18,6 +19,9 @@ export function valueNow(l: Pick<CardLoan, 'name' | 'quantity'>, prices: Map<str
 }
 
 // somma con conteggio delle carte senza prezzo (escluse dai totali, mai 0 €)
+// totale "~12,50 €"; se nessuna carta ha un prezzo, "prezzo n/d" invece di un fuorviante "~0,00 €"
+export const approx = (v: { cents: number; missing: number }) => (v.cents === 0 && v.missing > 0 ? 'prezzo n/d' : `~${eur(v.cents / 100)}`)
+
 export function sum(values: (number | null)[]) {
   return { cents: values.reduce<number>((s, v) => s + (v ?? 0), 0), missing: values.filter((v) => v == null).length }
 }

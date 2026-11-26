@@ -1,15 +1,21 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import type { Game } from '../lib/types'
-import { byId, dateIt, deckLabel } from '../lib/util'
+import { byId, dayIt, onDate, deckLabel } from '../lib/util'
 import { Avatar, DeckArt, Empty, Header, MANA, Modal, Pips, Segmented, TierBadge } from '../components'
 import { withUndo } from '../lib/toast'
 import { useNav } from '../lib/nav'
 import { Icon } from '../icons'
 import { usePerms } from '../lib/pod'
 
-type Row = { key: string; games: number; wins: number }
+// exp = vittorie attese: in una partita a N giocatori ognuno vince "di base" 1 volta su N
+type Row = { key: string; games: number; wins: number; exp: number }
 const pct = (r: Row) => (r.games ? Math.round((r.wins / r.games) * 100) : 0)
+const expPct = (r: Row) => (r.games ? Math.round((r.exp / r.games) * 100) : 0)
+// rendimento: vittorie in più (o in meno) rispetto all'atteso, pesate sul numero di partite
+// (+3 al denominatore: con poche partite il risultato conta meno, così 1 su 1 non batte 6 su 10)
+const score = (r: Row) => (r.wins - r.exp) / (r.games + 3)
+const MIN_CHAMP = 3 // partite minime per essere "mazzo campione"
 
 export default function StatsPage() {
   const { games, players, decks, tiers } = useStore()
@@ -38,25 +44,28 @@ export default function StatsPage() {
     const byDeck: Record<string, Row> = {}
     const byTag: Record<string, Row> = {}
     const byColor: Record<string, Row> = {}
-    const bump = (m: Record<string, Row>, k: string, win: boolean) => {
-      m[k] ??= { key: k, games: 0, wins: 0 }
+    const bump = (m: Record<string, Row>, k: string, win: boolean, exp: number) => {
+      m[k] ??= { key: k, games: 0, wins: 0, exp: 0 }
       m[k].games++
+      m[k].exp += exp
       if (win) m[k].wins++
     }
     for (const g of gs) {
+      // partite senza vincitore (pareggio): nessuno vince, quindi non c'è nemmeno un'attesa
+      const exp = g.winner_player_id ? 1 / Math.max(1, g.participants.length) : 0
       for (const p of g.participants) {
         if (!counts(p)) continue
         const win = g.winner_player_id === p.player_id
-        bump(byPlayer, p.player_id, win)
+        bump(byPlayer, p.player_id, win, exp)
         const d = p.deck_id ? D[p.deck_id] : undefined
         if (d) {
-          bump(byDeck, d.id, win)
-          d.tags.forEach((t) => bump(byTag, t, win))
-          ;(d.colors.length ? d.colors : ['C']).forEach((c) => bump(byColor, c, win))
+          bump(byDeck, d.id, win, exp)
+          d.tags.forEach((t) => bump(byTag, t, win, exp))
+          ;(d.colors.length ? d.colors : ['C']).forEach((c) => bump(byColor, c, win, exp))
         }
       }
     }
-    const sort = (m: Record<string, Row>) => Object.values(m).sort((a, b) => b.wins - a.wins || pct(b) - pct(a) || b.games - a.games)
+    const sort = (m: Record<string, Row>) => Object.values(m).sort((a, b) => score(b) - score(a) || b.wins - a.wins || b.games - a.games)
     const durs = gs.map((g) => g.duration_min).filter((x): x is number => !!x)
     return {
       players: sort(byPlayer),
@@ -64,10 +73,13 @@ export default function StatsPage() {
       tags: sort(byTag),
       colors: sort(byColor),
       avgDur: durs.length ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length) : null,
-      avgPod: gs.length ? (gs.reduce((a, g) => a + g.participants.length, 0) / gs.length).toFixed(1) : null,
+      avgPod: gs.length ? (gs.reduce((a, g) => a + g.participants.length, 0) / gs.length).toLocaleString('it-IT', { maximumFractionDigits: 1 }) : null,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gs, D, tier])
+
+  // mazzo campione: il miglior rendimento tra quelli con almeno MIN_CHAMP partite e una vittoria (altrimenti nessuno)
+  const champ = stats.decks.find((r) => r.games >= MIN_CHAMP && r.wins > 0) ?? null
 
   return (
     <div className="stack">
@@ -117,20 +129,20 @@ export default function StatsPage() {
         </Empty>
       ) : (
         <>
-          {stats.decks[0] && D[stats.decks[0].key] && (
+          {champ && D[champ.key] && (
             <div className="champion">
-              <DeckArt d={D[stats.decks[0].key]} className="champ-art" />
+              <DeckArt d={D[champ.key]} className="champ-art" />
               <div className="champ-body">
                 <div className="eyebrow">
                   <Icon name="trophy" size={14} /> Mazzo campione
                 </div>
-                <div className="champ-name">{deckLabel(D[stats.decks[0].key])}</div>
+                <div className="champ-name">{deckLabel(D[champ.key])}</div>
                 <div className="row small">
-                  <Pips colors={D[stats.decks[0].key].colors} />
-                  <span className="muted">di {P[D[stats.decks[0].key].player_id]?.name}</span>
+                  <Pips colors={D[champ.key].colors} />
+                  <span className="muted">di {P[D[champ.key].player_id]?.name}</span>
                 </div>
                 <div className="champ-stats">
-                  <b>{stats.decks[0].wins}</b> vittorie su {stats.decks[0].games} · <b>{pct(stats.decks[0])}%</b>
+                  <b>{champ.wins}</b> vittorie su {champ.games} · <b>{pct(champ)}%</b> <span className="muted">(atteso {expPct(champ)}%)</span>
                 </div>
               </div>
             </div>
@@ -146,6 +158,12 @@ export default function StatsPage() {
             ]}
           />
 
+          {view !== 'history' && (
+            <p className="muted small no-m">
+              Ordinati per rendimento: vittorie rispetto all'atteso (in 4 si vince di base 1 volta su 4, il 25%), contando di più chi ha giocato di più. Sotto la %, la
+              differenza dall'atteso.
+            </p>
+          )}
           {view === 'decks' && (
             <Table
               rows={stats.decks}
@@ -202,7 +220,7 @@ export default function StatsPage() {
                         })()}
                       </div>
                       <div className="muted small">
-                        {dateIt(g.played_at)} · {g.participants.length} giocatori{g.duration_min ? ` · ${g.duration_min} min` : ''}
+                        {dayIt(g.played_at)} · {g.participants.length} giocatori{g.duration_min ? ` · ${g.duration_min} min` : ''}
                       </div>
                     </div>
                     <Icon name="chevron" size={18} className="muted" />
@@ -240,7 +258,13 @@ function Table({ rows, label }: { rows: Row[]; label: (k: string) => React.React
           </span>
           <span>{r.games}</span>
           <span>{r.wins}</span>
-          <span className="strong">{pct(r)}%</span>
+          <span className="pct">
+            <b>{pct(r)}%</b>
+            <small className={pct(r) - expPct(r) > 0 ? 'pos' : pct(r) - expPct(r) < 0 ? 'neg' : 'muted'}>
+              {pct(r) - expPct(r) > 0 ? '+' : ''}
+              {pct(r) - expPct(r)}
+            </small>
+          </span>
         </div>
       ))}
     </div>
@@ -258,7 +282,7 @@ function GameDetail({ g, onClose }: { g: Game; onClose: () => void }) {
     return (b.eliminated_order ?? 99) - (a.eliminated_order ?? 99)
   })
   return (
-    <Modal title={`Partita del ${dateIt(g.played_at)}`} onClose={onClose}>
+    <Modal title={`Partita ${onDate('del', g.played_at)}`} onClose={onClose}>
       <div className="stack">
         <div className="list">
           {order.map((p) => (

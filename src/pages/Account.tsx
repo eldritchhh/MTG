@@ -5,7 +5,7 @@ import { usePod } from '../lib/pod'
 import { isCloud, supabase } from '../lib/supabase'
 import { useNav } from '../lib/nav'
 import { prefs } from '../lib/prefs'
-import { Avatar, Modal, Screen, Segmented } from '../components'
+import { Avatar, Modal, Screen, Segmented, Switch } from '../components'
 import { ChoosePlayer } from './Onboarding'
 import { CardNamesList, CommanderList, DataCard, LocalCards, VersionCard } from './Settings'
 import { APP_VERSION } from '../lib/version'
@@ -20,6 +20,7 @@ export function AccountScreen({ email, onClose }: { email: string; onClose: () =
   const [choose, setChoose] = useState(false)
   const [life, setLife] = useState(prefs.startingLife)
   const [vibration, setVibration] = useState(prefs.vibration)
+  const [awake, setAwake] = useState(prefs.keepAwake)
   const myDecks = decks.filter((d) => d.player_id === meId && d.active && !d.hidden).length
 
   return (
@@ -81,17 +82,24 @@ export function AccountScreen({ email, onClose }: { email: string; onClose: () =
             options={[20, 30, 40].map((v) => ({ id: String(v), label: String(v) }))}
           />
         </div>
-        <label className="row between">
-          <span>Vibrazione leggera (inizio partita, Pagato, cambio pod)</span>
-          <input
-            type="checkbox"
-            checked={vibration}
-            onChange={(e) => {
-              prefs.vibration = e.target.checked
-              setVibration(e.target.checked)
-            }}
-          />
-        </label>
+        <Switch
+          checked={vibration}
+          onChange={(on) => {
+            prefs.vibration = on
+            setVibration(on)
+          }}
+        >
+          Vibrazione leggera (inizio partita, Pagato, cambio pod)
+        </Switch>
+        <Switch
+          checked={awake}
+          onChange={(on) => {
+            prefs.keepAwake = on
+            setAwake(on)
+          }}
+        >
+          Schermo sempre acceso durante la partita
+        </Switch>
       </div>
 
       <h3 className="no-m">App e dati</h3>

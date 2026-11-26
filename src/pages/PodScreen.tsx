@@ -22,7 +22,7 @@ import { useNav } from '../lib/nav'
 import { ask } from '../lib/confirm'
 import { toast } from '../lib/toast'
 import { Icon } from '../icons'
-import { dateIt } from '../lib/util'
+import { onDate } from '../lib/util'
 
 const lastGame = (iso: string | null) => {
   if (!iso) return 'nessuna partita'
@@ -198,7 +198,7 @@ export function PodScreen({ onClose }: { onClose: () => void }) {
                 <b className="invite-code">{i.code}</b>
                 <span className="muted small">
                   {' '}
-                  · fino al {dateIt(i.expires_at)} · {i.uses_left} posti
+                  · fino {onDate('al', i.expires_at)} · {i.uses_left} posti
                 </span>
               </span>
               <span className="row">

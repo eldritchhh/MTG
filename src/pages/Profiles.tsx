@@ -4,7 +4,7 @@ import type { Deck, Player } from '../lib/types'
 import { PLAYER_COLORS, deckLabel } from '../lib/util'
 import { loadCommanders, searchCommanders, type Commander } from '../lib/scryfall'
 import type { Tier } from '../lib/types'
-import { Avatar, DeckArt, DeckCard, Empty, Header, MANA, Modal, Pips, Segmented, SplitArt, deckArts, manaGradient } from '../components'
+import { Avatar, DeckArt, DeckCard, Empty, Header, MANA, Modal, Pips, Segmented, SplitArt, Switch, deckArts, manaGradient } from '../components'
 import { ask } from '../lib/confirm'
 import { Icon } from '../icons'
 import { useBack } from '../lib/back'
@@ -505,13 +505,9 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
           <TierPicker tiers={tiers} value={tierId} onChange={setTierId} />
         </div>
         {personal && (own || perms.admin) && (
-          <label className="switch-row small">
-            <span className="switch">
-              <input type="checkbox" role="switch" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />
-              <i />
-            </span>
+          <Switch className="small" checked={hidden} onChange={setHidden}>
             Nascosto in questo gruppo
-          </label>
+          </Switch>
         )}
         <fieldset className="plain-fs stack" disabled={!own}>
           <div className="field">
@@ -548,9 +544,9 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
             <span>Note</span>
             <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Link alla lista, power level…" />
           </label>
-          <label className="row">
-            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Mazzo attivo{personal ? ' (in tutti i gruppi)' : ''}
-          </label>
+          <Switch checked={active} onChange={setActive}>
+            Mazzo attivo{personal ? ' (in tutti i gruppi)' : ''}
+          </Switch>
         </fieldset>
         <button className="primary" onClick={save}>
           Salva

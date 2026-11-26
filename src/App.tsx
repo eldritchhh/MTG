@@ -16,7 +16,7 @@ import { PodProvider, usePod, usePodRequired } from './lib/pod'
 import { ChoosePlayer, GateScreen, GroupStart } from './pages/Onboarding'
 import { NavCtx, useNav, type Nav, type Overlay, type Tab } from './lib/nav'
 import { ToastHost } from './lib/toast'
-import { Avatar, PodBadge } from './components'
+import { Avatar, LoadingPage, PodBadge } from './components'
 import { PodSheet, PodScreen } from './pages/PodScreen'
 import { AccountScreen } from './pages/Account'
 
@@ -53,7 +53,7 @@ function Root() {
     return () => data.subscription.unsubscribe()
   }, [])
 
-  if (!ready) return <div className="center muted">Caricamento…</div>
+  if (!ready) return <LoadingPage />
   if (isCloud && !session) return <Login />
   if (!isCloud)
     return (
@@ -71,7 +71,7 @@ function Root() {
 // con Supabase: prima un pod, poi "chi sei?", poi l'app sul pod attivo
 function PodGate({ email }: { email: string }) {
   const pod = usePodRequired()
-  if (pod.loading) return <div className="center muted">Caricamento…</div>
+  if (pod.loading) return <LoadingPage />
   if (pod.error) return <div className="center muted">Errore: {pod.error}</div>
   if (!pod.current)
     return (
@@ -191,7 +191,7 @@ function Shell({ email = '' }: { email?: string }) {
         )}
         <main ref={main} className={`content ${scrolled ? 'scrolled' : ''}`} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 60)}>
           {loading ? (
-            <div className="center muted">Caricamento…</div>
+            <LoadingPage />
           ) : (
             <div className="page-fade" key={`${pod?.current?.pod_id ?? 'local'}-${tab}`}>
               {tab === 'game' && <GamePage />}
