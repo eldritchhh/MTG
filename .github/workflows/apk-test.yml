@@ -46,8 +46,9 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          # niente VITE_GITHUB_REPO: la versione di prova non controlla gli aggiornamenti
+          # la versione di prova controlla solo le pre-release test-N (mai le versioni vere apk-N)
           VITE_APP_VERSION: test-${{ github.run_number }}
+          VITE_GITHUB_REPO: ${{ github.repository }}
 
       - name: Progetto Android "MTG (test)"
         run: |
