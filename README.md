@@ -29,7 +29,7 @@ Senza configurazione i dati restano nel browser del dispositivo.
 ## 2. Database condiviso gratis (Supabase) – ~5 minuti
 
 1. Crea un account su <https://supabase.com> → **New project** (piano Free).
-2. **SQL Editor → New query**: incolla il contenuto di [`supabase/schema.sql`](supabase/schema.sql) e premi **Run**.
+2. **SQL Editor → New query**: incolla il contenuto di [`supabase/schema.sql`](supabase/schema.sql) e premi **Run**, poi fai lo stesso con [`supabase/pods.sql`](supabase/pods.sql) e [`supabase/trades.sql`](supabase/trades.sql).
    Lo script si può rieseguire: quando aggiorni l'app, rilancialo per aggiungere le nuove colonne/tabelle (crea anche i tier S, 1, 2 la prima volta).
 3. **Authentication → Sign In / Providers → Email**: per semplicità puoi disattivare *Confirm email*.
 4. **Project Settings → API**: copia *Project URL* e la chiave *anon / public*.
@@ -63,7 +63,9 @@ src/
   pages/Trades.tsx   soldi e carte
   pages/Profiles.tsx giocatori, comandanti, tag
   pages/Stats.tsx    statistiche
-supabase/schema.sql  tabelle, sicurezza, realtime
+supabase/schema.sql  tabelle di base
+supabase/pods.sql    gruppi, ruoli, permessi (RLS)
+supabase/trades.sql  scambi carte+soldi, prezzi, migrazione dei vecchi prestiti
 ```
 
 Immagini e dati delle carte da [Scryfall](https://scryfall.com). Non affiliato a Wizards of the Coast.

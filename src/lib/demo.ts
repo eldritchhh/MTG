@@ -1,4 +1,4 @@
-import type { Debt, Deck, Game, Loan, Player, TableName, Tables, Tier } from './types'
+import type { Debt, Deck, Game, Loan, Player, TableName, Tables, Tier, Trade, TradeLine } from './types'
 
 export function defaultTiers(ids?: string[]): Tier[] {
   const now = new Date().toISOString()
@@ -66,25 +66,46 @@ export function demoData(): { [T in TableName]: Tables[T][] } {
   const debt = (n: number, a: string, b: string, amount: number, description: string, settled = false, d = n, group: [string, number] | null = null): Debt => ({
     id: uid(500 + n), debtor_id: P[a], creditor_id: P[b], amount, description, settled, created_at: iso(d), group_id: group?.[0] ?? null, group_total: group?.[1] ?? null,
   })
+  // spese divise (restano "spese")
   const ct0: [string, number] = [uid(599), 14]
   const debts = [
-    debt(1, 'Luca', 'Francesco', 4, 'Sol Ring + Arcane Signet'),
-    debt(2, 'Marco', 'Francesco', 12.5, 'Bustine Foundations'),
-    debt(3, 'Francesco', 'Giulia', 7, 'Pizza serata commander'),
-    debt(4, 'Sara', 'Luca', 3, 'Sleeves'),
-    debt(5, 'Giulia', 'Marco', 20, 'Dockside (vecchia storia)', true, 30),
     debt(6, 'Luca', 'Francesco', 3.5, 'Spedizione ordine CT0', false, 2, ct0),
     debt(7, 'Marco', 'Francesco', 3.5, 'Spedizione ordine CT0', true, 2, ct0),
     debt(8, 'Giulia', 'Francesco', 3.5, 'Spedizione ordine CT0', false, 2, ct0),
   ]
-  const loan = (n: number, a: string, b: string, cards: string, status: Loan['status'], notes: string | null = null, d = n): Loan => ({
-    id: uid(700 + n), lender_id: P[a], borrower_id: P[b], cards, status, notes, created_at: iso(d),
+  // scambi: soldi tra due persone, prestiti, uno scambio misto
+  const trades: Trade[] = []
+  const trade_lines: TradeLine[] = []
+  let ln = 0
+  const trade = (n: number, a: string, b: string, note: string | null, d: number, lines: Partial<TradeLine>[]) => {
+    const id = uid(700 + n)
+    trades.push({ id, player_a: P[a], player_b: P[b], note, created_at: iso(d) })
+    for (const l of lines)
+      trade_lines.push({
+        id: uid(800 + ++ln), trade_id: id, from_player: P[a], to_player: P[b], kind: 'card', status: null, name: null, quantity: 1,
+        value_cents: null, value_source: null, valued_at: null, returned_at: null, amount_cents: null, counts_in_balance: false,
+        settled: false, linked_line_id: null, created_at: iso(d), ...l,
+      })
+  }
+  const card = (name: string, status: TradeLine['status'], value: number | null, extra: Partial<TradeLine> = {}): Partial<TradeLine> => ({
+    kind: 'card', name, status, value_cents: value, value_source: value === null ? 'none' : 'scryfall', ...extra,
   })
-  const loans = [
-    loan(1, 'Francesco', 'Luca', 'Cyclonic Rift\nSmothering Tithe\nRhystic Study', 'prestito', 'per il torneo di sabato'),
-    loan(2, 'Giulia', 'Sara', 'Doubling Season', 'prestito'),
-    loan(3, 'Marco', 'Francesco', 'Craterhoof Behemoth', 'definitivo', 'scambiata con Teferi'),
-    loan(4, 'Luca', 'Marco', "Skullclamp\nAshnod's Altar", 'restituito', null, 12),
-  ]
-  return { players, decks, games, debts, loans, tiers }
+  const money = (cents: number, counts = true, settled = false, extra: Partial<TradeLine> = {}): Partial<TradeLine> => ({
+    kind: 'money', amount_cents: cents, counts_in_balance: counts, settled, ...extra,
+  })
+  trade(1, 'Luca', 'Francesco', 'Sol Ring + Arcane Signet', 1, [money(400)])
+  trade(2, 'Marco', 'Francesco', 'Bustine Foundations', 2, [money(1250)])
+  trade(3, 'Francesco', 'Giulia', 'Pizza serata commander', 3, [money(700)])
+  trade(4, 'Sara', 'Luca', 'Sleeves', 4, [money(300)])
+  trade(5, 'Giulia', 'Marco', 'Dockside (vecchia storia)', 30, [money(2000, true, true)])
+  trade(6, 'Francesco', 'Luca', 'per il torneo di sabato', 6, [card('Cyclonic Rift', 'loan', 2490), card('Smothering Tithe', 'loan', 1490), card('Rhystic Study', 'loan', 2990)])
+  trade(7, 'Giulia', 'Sara', null, 7, [card('Doubling Season', 'loan', 3490)])
+  trade(8, 'Marco', 'Francesco', 'scambiata con Teferi', 8, [
+    card('Craterhoof Behemoth', 'permanent', 3990),
+    card('Teferi, Time Raveler', 'permanent', 2200, { from_player: P['Francesco'], to_player: P['Marco'] }),
+    money(500, false, false, { from_player: P['Francesco'], to_player: P['Marco'] }),
+  ])
+  trade(9, 'Luca', 'Marco', null, 12, [card('Skullclamp', 'returned', 350, { returned_at: iso(5) }), card("Ashnod's Altar", 'returned', 690, { returned_at: iso(5) })])
+  const loans: Loan[] = []
+  return { players, decks, games, debts, loans, tiers, trades, trade_lines }
 }

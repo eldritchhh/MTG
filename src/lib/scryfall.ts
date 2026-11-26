@@ -23,7 +23,7 @@ let nextSearchAt = 0
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
-async function searchFetch(url: string) {
+export async function searchFetch(url: string) {
   const now = Date.now()
   const at = Math.max(now, nextSearchAt)
   nextSearchAt = at + SEARCH_GAP
@@ -181,6 +181,15 @@ export async function updateCardList(): Promise<number> {
 }
 
 export type CardHit = { name: string; printed?: string } // name = nome inglese, printed = nome italiano
+
+// nome inglese "ufficiale" di una carta scritta in qualsiasi modo ("sol ring", "Nebbia" → "Sol Ring", "Fog")
+export async function englishName(name: string): Promise<string> {
+  const ix = await loadCardIndex()
+  const q = norm(name).trim()
+  let i = ix.nen.indexOf(q)
+  if (i < 0) i = ix.nit.indexOf(q)
+  return i >= 0 ? ix.en[i] : name.trim()
+}
 
 // nome italiano di una carta (dalla lista nell'app), se c'è
 export async function italianOf(name: string): Promise<string | undefined> {

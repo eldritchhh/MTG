@@ -3,6 +3,16 @@ import type { Debt, Deck, Player } from './types'
 export const eur = (n: number) =>
   n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
 
+// "4", "4,5", "4.50", "1.234,50": virgola o punto; vuoto o non valido = 0
+export function parseEur(s: string) {
+  let t = s.replace(/[\s€]/g, '')
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.')
+  const n = Number(t)
+  return Number.isFinite(n) ? n : 0
+}
+
+export const centsToInput = (c: number | null | undefined) => (c == null ? '' : (c / 100).toFixed(2).replace('.', ','))
+
 export const dateIt = (iso: string) =>
   new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })
 

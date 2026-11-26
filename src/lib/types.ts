@@ -45,6 +45,38 @@ export type Loan = {
   created_at: string
 }
 
+// Scambio tra due giocatori: righe di carte (stato per riga) e di soldi
+export type Trade = {
+  id: string
+  pod_id?: string
+  player_a: string
+  player_b: string
+  note: string | null
+  created_at: string
+}
+
+export type LineStatus = 'loan' | 'permanent' | 'returned' | 'lost'
+export type TradeLine = {
+  id: string
+  pod_id?: string
+  trade_id: string
+  from_player: string
+  to_player: string
+  kind: 'card' | 'money'
+  status: LineStatus | null // solo carte
+  name: string | null // solo carte (nome inglese o come scritto)
+  quantity: number
+  value_cents: number | null // valore unitario concordato (snapshot); null = senza prezzo
+  value_source: 'scryfall' | 'manual' | 'none' | null
+  valued_at: string | null
+  returned_at: string | null
+  amount_cents: number | null // solo soldi: from_player deve dare (o ha dato) a to_player
+  counts_in_balance: boolean // soldi che entrano nei saldi "chi deve a chi"
+  settled: boolean // saldato con "Pagato"
+  linked_line_id: string | null
+  created_at: string
+}
+
 export type Participant = {
   player_id: string
   deck_id: string | null
@@ -72,6 +104,9 @@ export type Tables = {
   loans: Loan
   games: Game
   tiers: Tier
+  trades: Trade
+  trade_lines: TradeLine
 }
 export type TableName = keyof Tables
-export const TABLES: TableName[] = ['players', 'tiers', 'decks', 'debts', 'loans', 'games'] // in ordine di dipendenza (import backup)
+// in ordine di dipendenza (import backup). "loans" resta solo per i backup vecchi: i prestiti ora sono trades
+export const TABLES: TableName[] = ['players', 'tiers', 'decks', 'debts', 'loans', 'games', 'trades', 'trade_lines']

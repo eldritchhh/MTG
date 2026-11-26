@@ -464,3 +464,24 @@ button.link.small { font-size: 0.82rem; }
 .field.invalid .chips { outline: 1px solid var(--neg); outline-offset: 4px; border-radius: 12px; }
 .field-error { color: var(--neg); font-size: 0.8rem; font-style: normal; }
 button.card-link { cursor: pointer; }
+
+/* ---------- scambi ---------- */
+.summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.card.summary { display: flex; flex-direction: column; gap: 2px; }
+.card.summary .big { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.trade-people { gap: 8px; }
+.trade-people select { min-width: 0; }
+.trade-block h3 { margin-top: 0; }
+.trade-line { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.trade-line:last-of-type { border-bottom: none; }
+.trade-line .share-input { width: 84px; text-align: right; }
+.tl-value { gap: 4px; flex: none; }
+.mini-stepper button { min-width: 34px; height: 32px; }
+.mini-stepper b { min-width: 22px; font-size: 0.95rem; }
+.status-select { width: auto; padding: 0.4rem 0.6rem; font-size: 0.85rem; }
+.trade-sum { background: linear-gradient(180deg, #221c0f, #1a1610); border-color: #d9b45a33; }
+.person-hero { gap: 10px; }
+.gap-bar { height: 10px; border-radius: 999px; background: #4f8cf055; overflow: hidden; }
+.gap-bar i { display: block; height: 100%; background: var(--gold); border-radius: 999px; }
+.static-btn { padding: 10px 12px; }
+.list-item .chip.tiny { margin-left: 6px; }
