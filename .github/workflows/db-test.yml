@@ -1,7 +1,7 @@
-# Lancia uno script SQL sul database di PROVA (environment test-env).
-# Serve il secret SUPABASE_DB_URL in test-env: connection string Postgres del progetto di prova
+# Lancia uno script SQL sul database dell'app (environment test-env: il progetto nato "di prova",
+# ora usato dall'app vera). Serve il secret SUPABASE_DB_URL in test-env: connection string Postgres
 # (Supabase > Connect > Session pooler, con la password dentro).
-name: Aggiorna database di prova
+name: Aggiorna database
 
 on:
   workflow_dispatch:

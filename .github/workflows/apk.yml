@@ -13,8 +13,10 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    # Variables e Secrets sono salvati nell'environment "env" (Settings → Environments)
-    environment: env
+    # Variables e Secrets dall'environment "test-env" (Settings → Environments): è il progetto Supabase
+    # nato come "di prova" e ora usato dall'app vera. Il vecchio "env" punta al database di prima.
+    # La chiave di firma è la stessa in tutti e due: i telefoni aggiornano senza disinstallare.
+    environment: test-env
     steps:
       - uses: actions/checkout@v4
 
@@ -76,26 +78,26 @@ jobs:
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           "$BT/apksigner" sign --ks "$RUNNER_TEMP/mtg.keystore" --ks-key-alias mtg \
             --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD \
-            --out ../mtg-tra-amici.apk app/build/outputs/apk/release/app-release-unsigned.apk
-          "$BT/apksigner" verify --verbose --print-certs ../mtg-tra-amici.apk
+            --out ../MTGUtils.apk app/build/outputs/apk/release/app-release-unsigned.apk
+          "$BT/apksigner" verify --verbose --print-certs ../MTGUtils.apk
 
       - name: APK di debug (senza chiave di firma)
         if: env.HAS_KEYSTORE != 'true'
         working-directory: android
         run: |
           ./gradlew assembleDebug --no-daemon
-          cp app/build/outputs/apk/debug/app-debug.apk ../mtg-tra-amici.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../MTGUtils.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mtg-tra-amici-apk
-          path: mtg-tra-amici.apk
+          name: MTGUtils-apk
+          path: MTGUtils.apk
 
       - name: Pubblica come Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-${{ github.run_number }}
-          name: APK ${{ github.run_number }}
-          body: APK costruito da ${{ github.sha }}. Sul telefono scarica mtg-tra-amici.apk e aprilo.
-          files: mtg-tra-amici.apk
+          name: MTGUtils ${{ github.run_number }}
+          body: APK costruito da ${{ github.sha }}. Sul telefono scarica MTGUtils.apk e aprilo.
+          files: MTGUtils.apk
           make_latest: true

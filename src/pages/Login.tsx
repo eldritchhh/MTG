@@ -22,7 +22,7 @@ export default function Login() {
   return (
     <div className="login">
       <img src="./icon.svg" width={72} height={72} alt="" />
-      <h1>MTG tra amici</h1>
+      <h1>MTGUtils</h1>
       <form onSubmit={submit} className="card stack">
         <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
         <input

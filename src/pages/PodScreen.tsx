@@ -128,7 +128,7 @@ export function PodScreen({ onClose }: { onClose: () => void }) {
   }
 
   async function share(code: string) {
-    const text = `Entra nel pod "${cur.name}" su MTG tra amici con il codice ${code}`
+    const text = `Entra nel pod "${cur.name}" su MTGUtils con il codice ${code}`
     try {
       if (navigator.share) await navigator.share({ text })
       else {

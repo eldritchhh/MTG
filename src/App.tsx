@@ -247,7 +247,7 @@ function AppHeader() {
             {pod!.pods.length > 1 && <Icon name="chevron" size={16} className="pod-pill-chevron" />}
           </button>
         ) : (
-          <span className="app-title">MTG tra amici</span>
+          <span className="app-title">MTGUtils</span>
         )}
         <button
           className="avatar-btn"

@@ -49,13 +49,13 @@ Attenzione: vanno in **Variables**, non in *Secrets*.
 1. Tab **Actions** del repository. Se chiede di abilitare i workflow, abilitali.
 2. A sinistra **APK Android** → **Run workflow** → **Run workflow**.
 3. Dopo 3-5 minuti diventa verde. Nella pagina principale del repo, a destra, compare
-   **Releases → APK 1** con il file `mtg-tra-amici.apk`.
+   **Releases → MTGUtils N** con il file `MTGUtils.apk`.
 
 Da qui in poi l'APK si ricostruisce da solo a ogni push su `main`.
 
 ## 5. Installa sul telefono (Android)
 
-1. Dal telefono apri la pagina del repository su GitHub → **Releases** → scarica `mtg-tra-amici.apk`
+1. Dal telefono apri la pagina del repository su GitHub → **Releases** → scarica `MTGUtils.apk`
    (se il repo è privato devi essere loggato su GitHub dal telefono).
 2. Apri il file: Android chiede di permettere l'installazione da questa fonte (browser o file manager) → consenti.
 3. Se compare *Play Protect* dì **Installa comunque**: l'app non è sul Play Store, è normale.

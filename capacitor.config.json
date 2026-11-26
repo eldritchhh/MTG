@@ -1,6 +1,6 @@
 {
   "appId": "it.mtgamici.app",
-  "appName": "MTG tra amici",
+  "appName": "MTGUtils",
   "webDir": "dist",
   "android": {
     "backgroundColor": "#0e0c14"

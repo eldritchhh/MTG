@@ -1,6 +1,6 @@
 {
-  "name": "MTG tra amici",
-  "short_name": "MTG",
+  "name": "MTGUtils",
+  "short_name": "MTGUtils",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#14121c",
