@@ -147,7 +147,7 @@ export function GateScreen({ title, children }: { title: string; children: React
   return (
     <div className="gate">
       <div className="gate-head">
-        <img src="./icon.svg" width={48} height={48} alt="" />
+        <img src="./emblem.png" width={37} height={48} alt="" />
         <h1>{title}</h1>
       </div>
       {children}

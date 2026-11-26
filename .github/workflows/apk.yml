@@ -57,7 +57,7 @@ jobs:
           npx cap add android
           # barre di sistema scure e app sotto la barra di stato (non dietro) anche su Android 15+
           node scripts/android-theme.mjs
-          # icona e splash dal logo (assets/logo.png, si rigenera con: node scripts/build-icons.mjs)
+          # icona e splash dal logo (assets/logo.png, creato da assets/icon-source.png con: node scripts/build-icons.mjs)
           npx capacitor-assets generate --android \
             --iconBackgroundColor "#0e0c14" --iconBackgroundColorDark "#0e0c14" \
             --splashBackgroundColor "#0e0c14" --splashBackgroundColorDark "#0e0c14"
