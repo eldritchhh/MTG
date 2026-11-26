@@ -1,9 +1,9 @@
-// Versione dell'app (es. "apk-9" o "test-3", la stessa della Release su GitHub) e controllo di una versione più nuova.
+// Versione dell'app (es. "MTGUtils-12", la stessa della Release su GitHub) e controllo di una versione più nuova.
 // Le due variabili le imposta il workflow dell'APK; in sviluppo mancano e il controllo non parte.
-// L'app vera guarda solo le release "apk-N", l'app di prova solo le pre-release "test-N".
+// L'app guarda solo le release del suo canale (il nome prima del numero, es. "MTGUtils-").
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION as string | undefined
 const REPO = import.meta.env.VITE_GITHUB_REPO as string | undefined
-const PREFIX = APP_VERSION?.replace(/\d+$/, '') ?? 'apk-' // "apk-" oppure "test-"
+const PREFIX = APP_VERSION?.replace(/\d+$/, '') ?? 'MTGUtils-'
 
 export type Release = { tag: string; page: string; apk: string | null }
 type Cache = { at: number; release: Release | null }

@@ -48,8 +48,9 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          # versione mostrata nell'app = nome della Release (apk-N): serve al controllo aggiornamenti
-          VITE_APP_VERSION: apk-${{ github.run_number }}
+          # versione mostrata nell'app = nome della Release (MTGUtils-N): serve al controllo aggiornamenti.
+          # Le vecchie app (fino ad apk-11) guardano solo il numero finale: MTGUtils-12 per loro è più nuova.
+          VITE_APP_VERSION: MTGUtils-${{ github.run_number }}
           VITE_GITHUB_REPO: ${{ github.repository }}
 
       - name: Progetto Android (Capacitor)
@@ -96,8 +97,8 @@ jobs:
       - name: Pubblica come Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: apk-${{ github.run_number }}
-          name: MTGUtils ${{ github.run_number }}
+          tag_name: MTGUtils-${{ github.run_number }}
+          name: MTGUtils-${{ github.run_number }}
           body: APK costruito da ${{ github.sha }}. Sul telefono scarica MTGUtils.apk e aprilo.
           files: MTGUtils.apk
           make_latest: true
