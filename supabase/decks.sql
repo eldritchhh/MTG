@@ -275,3 +275,6 @@ begin
   alter publication supabase_realtime add table deck_pod;
 exception when duplicate_object then null;
 end $$;
+
+-- aggiorna subito le API di Supabase (altrimenti l'app può non vedere ancora la vista pod_decks)
+notify pgrst, 'reload schema';
