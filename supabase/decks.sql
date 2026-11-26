@@ -1,7 +1,7 @@
 -- ============================================================
 -- MTG tra amici - MAZZI PERSONALI (legati all'account, visibili in tutti i suoi gruppi)
 -- Da lanciare DOPO schema.sql, pods.sql e cards.sql. Si può rieseguire.
--- Se rilanci pods.sql, rilancia anche questo file (pods.sql rifà le regole dei mazzi).
+-- Le regole dei mazzi stanno solo qui: rilanciare pods.sql non le tocca.
 --
 -- decks      mazzo personale: owner_user = account, pod_id e player_id vuoti
 --            mazzo di gruppo (giocatore senza account): pod_id + player_id, come prima

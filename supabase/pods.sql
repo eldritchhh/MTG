@@ -1,7 +1,7 @@
 -- ============================================================
 -- MTG tra amici - GRUPPI ("pod") con ruoli admin / user
 -- Da lanciare DOPO schema.sql (SQL Editor > New query > Run). Si può rieseguire.
--- Se lo riesegui, rilancia poi anche decks.sql (qui le regole dei mazzi tornano quelle di gruppo).
+-- Se c'è già decks.sql, le regole dei mazzi restano quelle di decks.sql (questo file non le tocca).
 --
 -- - chiunque si registra può creare un gruppo (ne diventa admin) o entrarci con un codice invito
 -- - ogni dato (giocatori, tier, mazzi, partite, debiti, carte) appartiene a un gruppo
@@ -264,8 +264,10 @@ do $$
 declare t text; pol record;
 begin
   -- via le regole vecchie (amici_all, liste email) e quelle di un'esecuzione precedente di questo file
+  -- i mazzi no se c'è già decks.sql (mazzi personali): le loro regole stanno lì
   for pol in select policyname, tablename from pg_policies
              where schemaname = 'public' and tablename in ('players','tiers','decks','debts','loans','games','pods','pod_members','pod_invites')
+               and not (tablename = 'decks' and to_regclass('public.deck_pod') is not null)
   loop
     execute format('drop policy %I on %I', pol.policyname, pol.tablename);
   end loop;
@@ -289,7 +291,7 @@ create policy invites_delete on pod_invites for delete to authenticated using (p
 do $$
 declare t text;
 begin
-  foreach t in array array['players','tiers','decks','debts','loans','games'] loop
+  foreach t in array array['players','tiers','debts','loans','games'] loop
     execute format('create policy %I on %I for select to authenticated using (public.is_member(pod_id))', t || '_read', t);
   end loop;
 end $$;
@@ -306,14 +308,21 @@ create policy tiers_insert on tiers for insert to authenticated with check (publ
 create policy tiers_update on tiers for update to authenticated using (public.is_pod_admin(pod_id)) with check (public.is_pod_admin(pod_id));
 create policy tiers_delete on tiers for delete to authenticated using (public.is_pod_admin(pod_id));
 
--- mazzi: admin tutti; user solo i suoi
-create policy decks_write on decks for all to authenticated
-  using (public.is_pod_admin(pod_id) or player_id = public.my_player(pod_id))
-  with check (
-    public.player_in_pod(player_id, pod_id)
-    and (public.is_pod_admin(pod_id) or player_id = public.my_player(pod_id))
-    and (tier_id is null or exists (select 1 from tiers t where t.id = tier_id and t.pod_id = decks.pod_id))
-  );
+-- mazzi: tutto il gruppo li vede; admin modifica tutti, user solo i suoi.
+-- Solo finché non c'è decks.sql: da lì in poi le regole dei mazzi (anche personali) stanno in quel file
+do $$
+begin
+  if to_regclass('public.deck_pod') is null then
+    create policy decks_read on decks for select to authenticated using (public.is_member(pod_id));
+    create policy decks_write on decks for all to authenticated
+      using (public.is_pod_admin(pod_id) or player_id = public.my_player(pod_id))
+      with check (
+        public.player_in_pod(player_id, pod_id)
+        and (public.is_pod_admin(pod_id) or player_id = public.my_player(pod_id))
+        and (tier_id is null or exists (select 1 from tiers t where t.id = tier_id and t.pod_id = decks.pod_id))
+      );
+  end if;
+end $$;
 
 -- partite: ogni membro registra; modifica/elimina admin o chi ha giocato
 create policy games_insert on games for insert to authenticated
