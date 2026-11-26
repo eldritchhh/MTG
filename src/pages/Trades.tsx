@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { useMe, useStore } from '../lib/store'
 import type { Debt, Player } from '../lib/types'
 import { byId, dateIt, eur, netBalances, parseEur, playerName, settlements } from '../lib/util'
-import { Avatar, Empty, Header, Modal, PlayerSelect, Segmented } from '../components'
+import { Avatar, Empty, Header, Modal, Segmented } from '../components'
 import { Icon } from '../icons'
 import { useInPod, usePerms } from '../lib/pod'
 import { useNav } from '../lib/nav'
@@ -53,6 +53,8 @@ function Money() {
   const bal = useMemo(() => netBalances(debts), [debts])
   const plan = useMemo(() => settlements(bal), [bal])
   const entries = useMemo(() => toEntries(debts).filter((e) => showSettled || e.rows.some((r) => !r.settled)), [debts, showSettled])
+  const myBal = me ? (bal[me] ?? 0) : 0
+  const even = Math.abs(myBal) < 0.005
 
   // "Pagato": si esegue subito, con "Annulla" nel messaggio (al posto della conferma)
   async function settlePair(from: string, to: string, amount: number) {
@@ -83,8 +85,17 @@ function Money() {
       {me && P[me] && (
         <div className="card hero">
           <div className="muted small">Il tuo saldo</div>
-          <div className={`big ${(bal[me] ?? 0) >= 0 ? 'pos' : 'neg'}`}>{eur(bal[me] ?? 0)}</div>
-          <div className="muted small">{(bal[me] ?? 0) >= 0 ? 'devi ricevere' : 'devi dare'}</div>
+          {even ? (
+            <>
+              <div className="big">Sei in pari</div>
+              <div className="muted small">nessun debito aperto</div>
+            </>
+          ) : (
+            <>
+              <div className={`big ${myBal > 0 ? 'pos' : 'neg'}`}>{eur(myBal)}</div>
+              <div className="muted small">{myBal > 0 ? 'devi ricevere' : 'devi dare'}</div>
+            </>
+          )}
         </div>
       )}
 
@@ -123,12 +134,18 @@ function Money() {
 
       <div className="row between">
         <h2 className="section">Movimenti</h2>
-        <button className="primary" onClick={() => setForm('new')} disabled={players.length < 2}>
-          <Icon name="plus" size={18} /> Spesa
-        </button>
+        {entries.length > 0 && (
+          <button className="primary" onClick={() => setForm('new')}>
+            <Icon name="plus" size={18} /> Spesa
+          </button>
+        )}
       </div>
-      <label className="row small muted">
-        <input type="checkbox" checked={showSettled} onChange={(e) => setShowSettled(e.target.checked)} /> mostra saldati
+      <label className="switch-row small muted">
+        <span className="switch">
+          <input type="checkbox" role="switch" checked={showSettled} onChange={(e) => setShowSettled(e.target.checked)} />
+          <i />
+        </span>
+        Mostra saldati
       </label>
       {entries.length === 0 &&
         (players.length < 2 ? (
@@ -142,20 +159,19 @@ function Money() {
         ))}
       <div className="list">
         {entries.map((e) =>
-          e.rows.length === 1 && !e.rows[0].group_id ? (
+          e.rows.length === 1 && e.rows[0].settlement_id ? (
             <button
               key={e.key}
               className={`list-item ${e.rows[0].settled ? 'done' : ''}`}
               // i movimenti creati da un saldo carte aprono il dettaglio del saldo
-              onClick={() => (e.rows[0].settlement_id ? setDetail(e.rows[0].settlement_id) : setForm(e))}
-              disabled={!e.rows[0].settlement_id && !canEdit(e)}
+              onClick={() => setDetail(e.rows[0].settlement_id!)}
             >
               <div className="grow">
                 <div>
                   <b>{playerName(P, e.rows[0].debtor_id)}</b> deve a <b>{playerName(P, e.rows[0].creditor_id)}</b>
                 </div>
                 <div className="muted small">
-                  {e.rows[0].settlement_id && <Icon name="cards" size={12} />} {e.rows[0].description || 'senza descrizione'} · {dateIt(e.rows[0].created_at)}
+                  <Icon name="cards" size={12} /> {e.rows[0].description || 'Saldo carte'} · {dateIt(e.rows[0].created_at)}
                 </div>
               </div>
               <div className="strong">{eur(e.rows[0].amount)}</div>
@@ -164,13 +180,11 @@ function Money() {
             <button key={e.key} className={`list-item group-item ${e.rows.every((r) => r.settled) ? 'done' : ''}`} onClick={() => setForm(e)} disabled={!canEdit(e)}>
               <div className="grow stack-sm">
                 <div className="row between">
-                  <span>
-                    <b>{playerName(P, e.rows[0].creditor_id)}</b> ha pagato
-                  </span>
+                  <b>{e.rows[0].description || 'Spesa'}</b>
                   <span className="strong">{eur(groupTotal(e.rows))}</span>
                 </div>
                 <div className="muted small">
-                  <Icon name="users" size={13} /> {e.rows[0].description || 'Spesa divisa'} · {dateIt(e.rows[0].created_at)}
+                  pagato da {playerName(P, e.rows[0].creditor_id)} · {people(e.rows)} · {dateIt(e.rows[0].created_at)}
                 </div>
                 <div className="share-chips">
                   {e.rows.map((r) => (
@@ -206,6 +220,12 @@ function toEntries(debts: Debt[]): Entry[] {
 }
 
 const groupTotal = (rows: Debt[]) => rows[0].group_total ?? rows.reduce((s, r) => s + r.amount, 0)
+// chi ha pagato è nella divisione se il totale supera la somma delle quote degli altri
+const payerIncluded = (rows: Debt[]) => Math.abs(groupTotal(rows) - rows.reduce((s, r) => s + r.amount, 0)) > 0.004
+const people = (rows: Debt[]) => {
+  const n = rows.length + (payerIncluded(rows) ? 1 : 0)
+  return `${n} person${n === 1 ? 'a' : 'e'}`
+}
 
 // divide in centesimi senza perdere arrotondamenti (i centesimi in più vanno ai primi)
 function splitEqual(total: number, n: number) {
@@ -213,65 +233,61 @@ function splitEqual(total: number, n: number) {
   const base = Math.floor(cents / n)
   return Array.from({ length: n }, (_, i) => (base + (i < cents - base * n ? 1 : 0)) / 100)
 }
-type Errors = Partial<Record<'debtor' | 'creditor' | 'amount' | 'payer' | 'total' | 'part' | 'shares', string>>
+const fmtEur = (n: number) => String(n).replace('.', ',')
+type Errors = Partial<Record<'payer' | 'total' | 'part', string>>
 
+// Un solo form: chi ha pagato → quanto → tra chi si divide.
+// Le vecchie spese "tra due persone" si aprono qui come spese con un solo partecipante (stessi saldi).
 function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
   const { players, add, update, remove } = useStore()
   const [me] = useMe()
   const perms = usePerms()
+  const inPod = useInPod()
   const first = entry?.rows[0]
-  const isGroup = !!first?.group_id
-  const [mode, setMode] = useState<'single' | 'split'>(entry ? (isGroup ? 'split' : 'single') : 'split')
+  const active = players.filter((p) => !p.archived || entry?.rows.some((r) => r.debtor_id === p.id || r.creditor_id === p.id))
 
-  // --- tra due persone
-  const [debtor, setDebtor] = useState(!isGroup ? (first?.debtor_id ?? '') : '')
-  const [creditor, setCreditor] = useState(first?.creditor_id ?? me ?? '')
-  const [amount, setAmount] = useState(!isGroup && first ? String(first.amount).replace('.', ',') : '')
   const [desc, setDesc] = useState(first?.description ?? '')
-
-  // --- spesa divisa
-  const [total, setTotal] = useState(isGroup && first ? String(groupTotal(entry!.rows)).replace('.', ',') : '')
-  const initialPart = isGroup ? entry!.rows.map((r) => r.debtor_id) : []
-  const payerIncluded = isGroup ? Math.abs(groupTotal(entry!.rows) - entry!.rows.reduce((s, r) => s + r.amount, 0)) > 0.004 : true
-  const [part, setPart] = useState<string[]>(isGroup ? (payerIncluded ? [first!.creditor_id, ...initialPart] : initialPart) : [])
-  const [custom, setCustom] = useState(false)
-  const [shares, setShares] = useState<Record<string, string>>(() =>
-    isGroup ? Object.fromEntries(entry!.rows.map((r) => [r.debtor_id, String(r.amount).replace('.', ',')])) : {},
-  )
+  const [payer, setPayer] = useState(first?.creditor_id ?? (me && active.some((p) => p.id === me) ? me : ''))
+  const [total, setTotal] = useState(entry ? fmtEur(groupTotal(entry.rows)) : '')
+  const [part, setPart] = useState<string[]>(() => {
+    if (!entry) return []
+    const ids = entry.rows.map((r) => r.debtor_id)
+    return payerIncluded(entry.rows) ? [first!.creditor_id, ...ids] : ids
+  })
+  // quote diverse di più di un centesimo (il centesimo è l'arrotondamento della divisione in parti uguali)
+  const [custom, setCustom] = useState(() => {
+    const a = entry?.rows.map((r) => r.amount) ?? []
+    return a.length > 1 && Math.max(...a) - Math.min(...a) > 0.011
+  })
+  const [shares, setShares] = useState<Record<string, string>>(() => {
+    if (!entry) return {}
+    const s = Object.fromEntries(entry.rows.map((r) => [r.debtor_id, fmtEur(r.amount)]))
+    // la quota di chi ha pagato non è salvata: è il totale meno le altre
+    if (payerIncluded(entry.rows)) s[first!.creditor_id] = fmtEur(Math.round((groupTotal(entry.rows) - entry.rows.reduce((t, r) => t + r.amount, 0)) * 100) / 100)
+    return s
+  })
+  const [errors, setErrors] = useState<Errors>({})
 
   const tot = parseEur(total)
-  const payer = creditor
-  const equal = useMemo(() => (tot > 0 && part.length ? splitEqual(tot, part.length) : []), [tot, part.length])
-  const shareOf = (id: string) => (custom ? parseEur(shares[id] ?? '') || 0 : equal[part.indexOf(id)] ?? 0)
-  const assigned = part.reduce((s, id) => s + shareOf(id), 0)
+  const ordered = active.map((p) => p.id).filter((id) => part.includes(id))
+  const equal = useMemo(() => (tot > 0 && ordered.length ? splitEqual(tot, ordered.length) : []), [tot, ordered.length])
+  const shareOf = (id: string) => (custom ? parseEur(shares[id] ?? '') || 0 : (equal[ordered.indexOf(id)] ?? 0))
+  const assigned = ordered.reduce((s, id) => s + shareOf(id), 0)
   const diff = Math.round((tot - assigned) * 100) / 100
-
-  const amt = parseEur(amount)
-  // chi non è admin registra solo movimenti in cui è coinvolto (nelle spese divise: quelle che ha pagato lui)
-  const allowed = mode === 'single' ? perms.involved(debtor, creditor) : perms.involved(payer)
-  const [errors, setErrors] = useState<Errors>({})
-  const inPod = useInPod()
-  const active = players.filter((p) => !p.archived)
 
   function validate(): Errors {
     const e: Errors = {}
-    if (mode === 'single') {
-      if (!debtor) e.debtor = 'Scegli chi deve'
-      if (!creditor) e.creditor = 'Scegli a chi'
-      else if (!allowed) e.creditor = 'Puoi registrare solo debiti in cui ci sei tu'
-      if (!(amt > 0)) e.amount = "Inserisci l'importo"
-    } else {
-      if (!payer) e.payer = 'Scegli chi ha pagato'
-      else if (!allowed) e.payer = 'Puoi registrare solo le spese che hai pagato tu'
-      if (!(tot > 0)) e.total = 'Inserisci il totale'
-      if (!part.some((id) => id !== payer)) e.part = 'Scegli tra chi si divide (oltre a chi ha pagato)'
-      else if (custom && Math.abs(diff) >= 0.005) e.shares = diff > 0 ? `Mancano ${eur(diff)} da assegnare` : `Hai assegnato ${eur(-diff)} in più del totale`
-    }
+    if (!payer) e.payer = 'Scegli chi ha pagato'
+    // chi non è admin registra solo le spese che ha pagato lui
+    else if (!perms.involved(payer)) e.payer = 'Puoi registrare solo le spese che hai pagato tu'
+    if (!(tot > 0)) e.total = 'Inserisci il totale'
+    if (!ordered.some((id) => id !== payer)) e.part = 'Scegli almeno una persona oltre a chi ha pagato'
+    else if (custom && Math.abs(diff) >= 0.005) e.part = diff > 0 ? `Mancano ${eur(diff)} da assegnare` : `Hai assegnato ${eur(-diff)} in più del totale`
     return e
   }
 
   function togglePart(id: string) {
-    setPart((p) => (p.includes(id) ? p.filter((x) => x !== id) : players.map((x) => x.id).filter((x) => x === id || p.includes(x))))
+    setPart((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
   }
 
   // "Salva" sempre attivo: se manca qualcosa porto al primo campo da correggere
@@ -283,146 +299,114 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
       document.querySelector(`[data-field="${firstError}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
-    // modificare una spesa = sostituire le sue righe
+    // modificare una spesa = sostituire le sue righe (tengo data e "già restituito" se la quota non cambia)
     if (entry) for (const r of entry.rows) await remove('debts', r.id)
-    if (mode === 'single') {
+    const group_id = crypto.randomUUID()
+    const group_total = Math.round(tot * 100) / 100
+    for (const id of ordered) {
+      if (id === payer) continue
+      const share = Math.round(shareOf(id) * 100) / 100
+      if (share <= 0) continue
+      const before = entry?.rows.find((r) => r.debtor_id === id)
       await add('debts', {
-        debtor_id: debtor, creditor_id: creditor, amount: Math.round(amt * 100) / 100, description: desc.trim(),
-        settled: (!isGroup && first?.settled) || false, group_id: null, group_total: null,
+        debtor_id: id, creditor_id: payer, amount: share, description: desc.trim(),
+        settled: !!before && before.settled && before.creditor_id === payer && Math.abs(before.amount - share) < 0.005,
+        group_id, group_total,
+        ...(first ? { created_at: first.created_at } : {}),
       })
-    } else {
-      const group_id = crypto.randomUUID()
-      for (const id of part) {
-        if (id === payer) continue
-        const share = Math.round(shareOf(id) * 100) / 100
-        if (share <= 0) continue
-        const before = entry?.rows.find((r) => r.debtor_id === id)
-        await add('debts', {
-          debtor_id: id, creditor_id: payer, amount: share, description: desc.trim(),
-          settled: !!before && before.settled && Math.abs(before.amount - share) < 0.005,
-          group_id, group_total: Math.round(tot * 100) / 100,
-        })
-      }
     }
     onClose()
   }
 
+  const err = (k: keyof Errors) => (errors[k] ? <em className="field-error">{errors[k]}</em> : null)
+
   return (
     <Modal title={entry ? 'Modifica spesa' : `Nuova spesa${inPod}`} onClose={onClose}>
       <div className="stack">
-        <Segmented
-          value={mode}
-          onChange={setMode}
-          options={[
-            { id: 'split', label: 'Divisa tra più persone' },
-            { id: 'single', label: 'Tra due persone' },
-          ]}
-        />
         <label className="field">
           <span>Per cosa</span>
-          <input placeholder={mode === 'split' ? 'Es. Spedizione ordine CT0' : 'Es. Sol Ring + Arcane Signet'} value={desc} onChange={(e) => setDesc(e.target.value)} />
+          <input placeholder="Es. Spedizione ordine CT0" value={desc} onChange={(e) => setDesc(e.target.value)} />
         </label>
 
-        {mode === 'single' ? (
-          <>
-            <label className={`field ${errors.debtor ? 'invalid' : ''}`} data-field="debtor">
-              <span>Chi deve</span>
-              <PlayerSelect players={players} value={debtor} onChange={setDebtor} exclude={creditor} />
-              {errors.debtor && <em className="field-error">{errors.debtor}</em>}
+        <div className={`field ${errors.payer ? 'invalid' : ''}`} data-field="payer">
+          <span>Chi ha pagato</span>
+          <div className="chips">
+            {active.map((p) => (
+              <button key={p.id} className={`chip big ${payer === p.id ? 'on' : ''}`} aria-pressed={payer === p.id} onClick={() => setPayer(p.id)}>
+                <Avatar p={p} size={22} /> {p.name}
+              </button>
+            ))}
+          </div>
+          {err('payer')}
+        </div>
+
+        <label className={`field ${errors.total ? 'invalid' : ''}`} data-field="total">
+          <span>Totale (€)</span>
+          <input inputMode="decimal" placeholder="0,00" value={total} onChange={(e) => setTotal(e.target.value)} />
+          {err('total')}
+        </label>
+
+        <div className={`field ${errors.part ? 'invalid' : ''}`} data-field="part">
+          <span>Tra chi si divide</span>
+          <div className="chips">
+            {active.map((p) => (
+              <button key={p.id} className={`chip big ${part.includes(p.id) ? 'on' : ''}`} aria-pressed={part.includes(p.id)} onClick={() => togglePart(p.id)}>
+                <Avatar p={p} size={22} /> {p.name}
+                {p.id === payer && <span className="tiny-tag">ha pagato</span>}
+              </button>
+            ))}
+          </div>
+          <div className="row small muted">
+            <button className="link small" onClick={() => setPart(active.map((p) => p.id))}>
+              Tutti
+            </button>
+            <span className="dot" />
+            <button className="link small" onClick={() => setPart([])}>
+              Nessuno
+            </button>
+          </div>
+          {tot > 0 && ordered.length > 0 && !custom && (
+            <p className="small muted no-m">
+              {eur(tot)} · {ordered.length} person{ordered.length === 1 ? 'a' : 'e'} · {eur(equal[equal.length - 1] ?? 0)} a testa
+            </p>
+          )}
+          {err('part')}
+        </div>
+
+        {ordered.length > 1 && tot > 0 && (
+          <div className="card split-box">
+            <label className="switch-row small">
+              <span className="switch">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={custom}
+                  onChange={(e) => {
+                    setCustom(e.target.checked)
+                    if (e.target.checked) setShares(Object.fromEntries(ordered.map((id, i) => [id, fmtEur(equal[i] ?? 0)])))
+                  }}
+                />
+                <i />
+              </span>
+              Importi diversi
             </label>
-            <label className={`field ${errors.creditor ? 'invalid' : ''}`} data-field="creditor">
-              <span>A chi</span>
-              <PlayerSelect players={players} value={creditor} onChange={setCreditor} exclude={debtor} />
-              {errors.creditor && <em className="field-error">{errors.creditor}</em>}
-            </label>
-            <label className={`field ${errors.amount ? 'invalid' : ''}`} data-field="amount">
-              <span>Importo (€)</span>
-              <input inputMode="decimal" placeholder="0,00" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              {errors.amount && <em className="field-error">{errors.amount}</em>}
-            </label>
-          </>
-        ) : (
-          <>
-            <div className={`field ${errors.payer ? 'invalid' : ''}`} data-field="payer">
-              <span>Chi ha pagato</span>
-              <div className="chips">
-                {active.map((p) => (
-                  <button key={p.id} className={`chip big ${creditor === p.id ? 'on' : ''}`} aria-pressed={creditor === p.id} onClick={() => setCreditor(p.id)}>
-                    <Avatar p={p} size={22} /> {p.name}
-                  </button>
-                ))}
-              </div>
-              {errors.payer && <em className="field-error">{errors.payer}</em>}
-            </div>
-            <label className={`field ${errors.total ? 'invalid' : ''}`} data-field="total">
-              <span>Totale (€)</span>
-              <input inputMode="decimal" placeholder="0,00" value={total} onChange={(e) => setTotal(e.target.value)} />
-              {errors.total && <em className="field-error">{errors.total}</em>}
-            </label>
-            <div className={`field ${errors.part ? 'invalid' : ''}`} data-field="part">
-              <span>Tra chi si divide</span>
-              <div className="chips">
-                {active.map((p) => (
-                  <button key={p.id} className={`chip big ${part.includes(p.id) ? 'on' : ''}`} onClick={() => togglePart(p.id)}>
-                    <Avatar p={p} size={22} /> {p.name}
-                    {p.id === payer && <span className="tiny-tag">ha pagato</span>}
-                  </button>
-                ))}
-              </div>
-              <div className="row small muted">
-                <button className="link small" onClick={() => setPart(active.map((p) => p.id))}>
-                  Tutti
-                </button>
-                <span className="dot" />
-                <button className="link small" onClick={() => setPart([])}>
-                  Nessuno
-                </button>
-              </div>
-              {errors.part && <em className="field-error">{errors.part}</em>}
-            </div>
-            {part.length > 0 && tot > 0 && (
-              <div className="card split-box">
-                <div className="row between">
-                  <h3 className="no-m">Quote</h3>
-                  <label className="row small">
-                    <input
-                      type="checkbox"
-                      checked={custom}
-                      onChange={(e) => {
-                        setCustom(e.target.checked)
-                        if (e.target.checked) setShares(Object.fromEntries(part.map((id, i) => [id, String(equal[i] ?? 0).replace('.', ',')])))
-                      }}
-                    />{' '}
-                    importi diversi
-                  </label>
+            {custom &&
+              ordered.map((id) => (
+                <div key={id} className="row between line">
+                  <span className="row">
+                    <Avatar p={P(players, id)} size={22} /> {P(players, id)?.name}
+                    {id === payer && <span className="muted small">(già pagato)</span>}
+                  </span>
+                  <input className="share-input" inputMode="decimal" value={shares[id] ?? ''} onChange={(e) => setShares({ ...shares, [id]: e.target.value })} />
                 </div>
-                {part.map((id) => (
-                  <div key={id} className="row between line">
-                    <span className="row">
-                      <Avatar p={P(players, id)} size={22} /> {P(players, id)?.name}
-                      {id === payer && <span className="muted small">(già pagato)</span>}
-                    </span>
-                    {custom ? (
-                      <input className="share-input" inputMode="decimal" value={shares[id] ?? ''} onChange={(e) => setShares({ ...shares, [id]: e.target.value })} />
-                    ) : (
-                      <b>{eur(shareOf(id))}</b>
-                    )}
-                  </div>
-                ))}
-                {custom && Math.abs(diff) >= 0.005 && (
-                  <p className="small neg" data-field="shares">
-                    {diff > 0 ? `Mancano ${eur(diff)} da assegnare` : `Hai assegnato ${eur(-diff)} in più del totale`}
-                  </p>
-                )}
-              </div>
-            )}
-          </>
+              ))}
+          </div>
         )}
 
         <button className="primary" onClick={save}>
           Salva
         </button>
-        {entry && entry.rows.length > 1 && (
+        {entry && (
           <div className="card stack-sm">
             <h3 className="no-m">Chi ha già restituito la sua quota</h3>
             {entry.rows.map((r) => (
@@ -434,16 +418,6 @@ function ExpenseForm({ entry, onClose }: { entry: Entry | null; onClose: () => v
               </label>
             ))}
           </div>
-        )}
-        {entry && entry.rows.length === 1 && (
-          <button
-            onClick={async () => {
-              await update('debts', entry.rows[0].id, { settled: !entry.rows[0].settled })
-              onClose()
-            }}
-          >
-            {entry.rows[0].settled ? 'Riapri' : '✓ Segna come saldato'}
-          </button>
         )}
         {entry && (
           <button
