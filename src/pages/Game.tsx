@@ -794,6 +794,8 @@ function SeatTile({
   const cmdTotal = Object.values(seat.cmd).reduce((a, b) => a + b, 0)
   const arts = deckArts(deck)
   const holdable = !cmd && !cmdTarget
+  // segnalini diversi da zero (veleno, energia, esperienza) da mostrare nel bottone in basso
+  const counters = ([['drop', seat.poison], ['bolt', seat.energy ?? 0], ['star', seat.exp ?? 0]] as const).filter(([, v]) => v > 0)
 
   // tieni premuto → posto "in mano": trascina e rilascia su un altro posto, oppure rilascia e tocca il posto
   const cancelHold = () => {
@@ -874,29 +876,19 @@ function SeatTile({
           </div>
         )}
       </div>
-      {!cmd && (monarch || initiative || !!seat.energy || !!seat.exp) && (
-          <div className="seat-badges">
-            {monarch && (
-              <span className="sbadge gold" title="Monarca">
-                <Icon name="crown" size={13} />
-              </span>
-            )}
-            {initiative && (
-              <span className="sbadge" title="Iniziativa">
-                <Icon name="door" size={13} />
-              </span>
-            )}
-            {!!seat.energy && (
-              <span className="sbadge" title="Energia">
-                <Icon name="bolt" size={12} /> {seat.energy}
-              </span>
-            )}
-            {!!seat.exp && (
-              <span className="sbadge" title="Esperienza">
-                <Icon name="star" size={12} /> {seat.exp}
-              </span>
-            )}
-          </div>
+      {!cmd && (monarch || initiative) && (
+        <div className="seat-badges">
+          {monarch && (
+            <span className="sbadge gold" title="Monarca">
+              <Icon name="crown" size={13} />
+            </span>
+          )}
+          {initiative && (
+            <span className="sbadge" title="Iniziativa">
+              <Icon name="door" size={13} />
+            </span>
+          )}
+        </div>
       )}
 
       {cmd ? (
@@ -944,8 +936,16 @@ function SeatTile({
               <button className="mini" onClick={onCmd} aria-label={`Danni da comandante a ${player?.name ?? ''}`}>
                 <Icon name="sword" size={14} /> {cmdTotal}
               </button>
-              <button className="mini" onClick={onOpen} aria-label={`Altri contatori di ${player?.name ?? ''}`}>
-                <Icon name="drop" size={14} /> {seat.poison}
+              <button className="mini" onClick={onOpen} aria-label={`Segnalini di ${player?.name ?? ''}`}>
+                {counters.length ? (
+                  counters.map(([icon, v]) => (
+                    <span key={icon} className="mini-count">
+                      <Icon name={icon} size={13} /> {v}
+                    </span>
+                  ))
+                ) : (
+                  <Icon name="tokens" size={15} />
+                )}
               </button>
             </span>
             <button className="mini" onClick={() => bump(5)}>
@@ -963,6 +963,25 @@ function CounterPanel({ live, idx, P, D, onClose, change }: { live: Live; idx: n
   return (
     <Modal title={`Contatori di ${P[seat.player_id]?.name ?? ''}`} onClose={onClose}>
       <div className="stack">
+        <h3>Segnalini</h3>
+        <div className="row between line">
+          <span className="row">
+            <Icon name="drop" size={16} /> Veleno (10 = fuori)
+          </span>
+          <Stepper value={seat.poison} danger={seat.poison >= 10} onChange={(d) => change((s) => ({ ...s, poison: Math.max(0, s.poison + d) }))} />
+        </div>
+        <div className="row between line">
+          <span className="row">
+            <Icon name="bolt" size={16} /> Energia
+          </span>
+          <Stepper value={seat.energy ?? 0} onChange={(d) => change((s) => ({ ...s, energy: Math.max(0, (s.energy ?? 0) + d) }))} />
+        </div>
+        <div className="row between line">
+          <span className="row">
+            <Icon name="star" size={16} /> Esperienza
+          </span>
+          <Stepper value={seat.exp ?? 0} onChange={(d) => change((s) => ({ ...s, exp: Math.max(0, (s.exp ?? 0) + d) }))} />
+        </div>
         <h3>Danni da comandante ricevuti</h3>
         <p className="muted small">I danni tolgono anche i punti vita. A 21 da uno stesso comandante si è fuori: con i partner ognuno dei due conta a parte.</p>
         {live.seats.map((src, j) => {
@@ -1003,26 +1022,6 @@ function CounterPanel({ live, idx, P, D, onClose, change }: { live: Live; idx: n
             </div>
           )
         })}
-        <h3>Segnalini veleno</h3>
-        <div className="row between line">
-          <span className="row">
-            <Icon name="drop" size={16} /> Veleno (10 = fuori)
-          </span>
-          <Stepper value={seat.poison} danger={seat.poison >= 10} onChange={(d) => change((s) => ({ ...s, poison: Math.max(0, s.poison + d) }))} />
-        </div>
-        <h3>Altri segnalini</h3>
-        <div className="row between line">
-          <span className="row">
-            <Icon name="bolt" size={16} /> Energia
-          </span>
-          <Stepper value={seat.energy ?? 0} onChange={(d) => change((s) => ({ ...s, energy: Math.max(0, (s.energy ?? 0) + d) }))} />
-        </div>
-        <div className="row between line">
-          <span className="row">
-            <Icon name="star" size={16} /> Esperienza
-          </span>
-          <Stepper value={seat.exp ?? 0} onChange={(d) => change((s) => ({ ...s, exp: Math.max(0, (s.exp ?? 0) + d) }))} />
-        </div>
         <h3>Punti vita</h3>
         <div className="row between line">
           <span className="row">

@@ -555,3 +555,4 @@ button.card-link { cursor: pointer; }
 /* statistiche: % e differenza dall'atteso */
 .trow .pct { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
 .trow .pct small { font-size: 0.68rem; font-weight: 700; }
+.mini-count { display: inline-flex; align-items: center; gap: 2px; }
