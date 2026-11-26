@@ -1,0 +1,36 @@
+# Lancia uno script SQL sul database di PROVA (environment test-env).
+# Serve il secret SUPABASE_DB_URL in test-env: connection string Postgres del progetto di prova
+# (Supabase > Connect > Session pooler, con la password dentro).
+name: Aggiorna database di prova
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: 'Script in supabase/ da lanciare'
+        required: true
+        default: decks.sql
+
+permissions:
+  contents: read
+
+jobs:
+  sql:
+    runs-on: ubuntu-latest
+    environment: test-env
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lancia lo script
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SCRIPT: ${{ inputs.script }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::error::Manca il secret SUPABASE_DB_URL nell'environment test-env."
+            exit 1
+          fi
+          case "$SCRIPT" in
+            */*|..*|"") echo "::error::Indica solo il nome di un file in supabase/"; exit 1 ;;
+          esac
+          test -f "supabase/$SCRIPT" || { echo "::error::supabase/$SCRIPT non esiste"; exit 1; }
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f "supabase/$SCRIPT"
