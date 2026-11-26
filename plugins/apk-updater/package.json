@@ -1,0 +1,12 @@
+{
+  "name": "mtg-apk-updater",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plugin Capacitor dell'app: scarica l'APK di un aggiornamento e apre l'installer di Android",
+  "main": "index.js",
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  }
+}

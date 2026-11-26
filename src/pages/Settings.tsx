@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMe, useStore } from '../lib/store'
 import { cardListInfo, commanderListInfo, updateCardList, updateCommanderList } from '../lib/scryfall'
 import { APP_VERSION, isNewer, latestRelease, type Release } from '../lib/version'
+import { canSelfUpdate, useSelfUpdate } from '../lib/updater'
 import { PLAYER_COLORS, dateIt } from '../lib/util'
 import type { Tier } from '../lib/types'
 import { isCloud } from '../lib/supabase'
@@ -183,6 +184,7 @@ export function TierManager() {
 export function VersionCard() {
   const [state, setState] = useState<{ release: Release | null; err?: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const up = useSelfUpdate()
   async function check() {
     setBusy(true)
     try {
@@ -202,11 +204,17 @@ export function VersionCard() {
       <p className="muted small no-m">Installata: {APP_VERSION}</p>
       {state?.err && <p className="small neg no-m">{state.err}</p>}
       {state && !state.err && !newer && <p className="small no-m">È l'ultima versione.</p>}
-      {newer && (
-        <a className="button-like primary" href={newer.apk ?? newer.page} target="_blank" rel="noreferrer">
-          Scarica {newer.tag}
-        </a>
-      )}
+      {newer &&
+        (newer.apk && canSelfUpdate() ? (
+          <button className="primary" disabled={up.busy} onClick={() => up.run(newer.apk!)}>
+            {up.busy ? `Scarico… ${up.percent}%` : `Aggiorna a ${newer.tag}`}
+          </button>
+        ) : (
+          <a className="button-like primary" href={newer.apk ?? newer.page} target="_blank" rel="noreferrer">
+            Scarica {newer.tag}
+          </a>
+        ))}
+      {up.error && <p className="small neg no-m">{up.error}</p>}
       <button onClick={check} disabled={busy}>
         {busy ? 'Controllo…' : 'Controlla aggiornamenti'}
       </button>

@@ -94,7 +94,9 @@ jobs:
           name: MTGUtils-apk
           path: MTGUtils.apk
 
+      # la Release (e quindi l'aggiornamento sui telefoni) solo da main; da un altro branch si prova solo la build
       - name: Pubblica come Release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: MTGUtils-${{ github.run_number }}

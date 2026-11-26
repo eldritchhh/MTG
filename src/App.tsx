@@ -11,6 +11,7 @@ import { Icon } from './icons'
 import { ConfirmHost } from './lib/confirm'
 import { useBack } from './lib/back'
 import { isNewer, latestRelease, type Release } from './lib/version'
+import { canSelfUpdate, useSelfUpdate } from './lib/updater'
 import { PodProvider, usePod, usePodRequired } from './lib/pod'
 import { ChoosePlayer, GateScreen, GroupStart } from './pages/Onboarding'
 import { NavCtx, useNav, type Nav, type Overlay, type Tab } from './lib/nav'
@@ -181,9 +182,7 @@ function Shell({ email = '' }: { email?: string }) {
           <div className="banner update">
             <span className="grow">
               È uscita la versione <b>{update.release.tag}</b>.{' '}
-              <a href={update.release.apk ?? update.release.page} target="_blank" rel="noreferrer">
-                Scarica e installa
-              </a>
+              <UpdateLink release={update.release} />
             </span>
             <button className="icon-btn sm" onClick={update.dismiss} aria-label="Nascondi">
               <Icon name="x" size={14} />
@@ -270,5 +269,25 @@ function AppHeader() {
       </div>
       <div className="pod-bar" />
     </header>
+  )
+}
+
+// "Aggiorna": dall'app (scarica e apre l'installer) se il plugin c'è, altrimenti link al file
+function UpdateLink({ release }: { release: Release }) {
+  const up = useSelfUpdate()
+  if (!release.apk || !canSelfUpdate())
+    return (
+      <a href={release.apk ?? release.page} target="_blank" rel="noreferrer">
+        Scarica e installa
+      </a>
+    )
+  if (up.busy) return <span>Scarico… {up.percent}%</span>
+  return (
+    <>
+      <button className="link inline" onClick={() => up.run(release.apk!)}>
+        Aggiorna
+      </button>
+      {up.error && <span className="neg"> {up.error}</span>}
+    </>
   )
 }
