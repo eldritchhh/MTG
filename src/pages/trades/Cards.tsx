@@ -124,10 +124,17 @@ function ContoScreen({ other, onClose }: { other: string; onClose: () => void })
   }, [me, other])
 
   const selected = Object.entries(sel).filter(([, q]) => q > 0)
-  const selVal = sum(selected.map(([id, q]) => {
-    const l = card_loans.find((x) => x.id === id)
-    return l ? valueNow({ name: l.name, quantity: q }, prices) : null
-  }))
+  const valOf = (rows: [string, number][]) =>
+    sum(rows.map(([id, q]) => {
+      const l = card_loans.find((x) => x.id === id)
+      return l ? valueNow({ name: l.name, quantity: q }, prices) : null
+    }))
+  const selVal = valOf(selected)
+  // carte in entrambe le direzioni: conta la differenza (sue che tengo − mie che tiene lui), non la somma
+  const selTheirs = valOf(selected.filter(([id]) => theirs.some((l) => l.id === id)))
+  const selMine = valOf(selected.filter(([id]) => mine.some((l) => l.id === id)))
+  const mixed = selected.some(([id]) => theirs.some((l) => l.id === id)) && selected.some(([id]) => mine.some((l) => l.id === id))
+  const net = selTheirs.cents - selMine.cents
 
   // restituisci (anche solo alcune copie: la riga si divide), con "Annulla"
   async function giveBack() {
@@ -239,7 +246,12 @@ function ContoScreen({ other, onClose }: { other: string; onClose: () => void })
       {selected.length > 0 && (
         <div className="action-bar">
           <span className="grow small">
-            <b>{selected.reduce((s, [, q]) => s + q, 0)} selezionate</b> · ~{eur(selVal.cents / 100)}
+            <b>{selected.reduce((s, [, q]) => s + q, 0)} selezionate</b> ·{' '}
+            {!mixed
+              ? `~${eur(selVal.cents / 100)}`
+              : net === 0
+                ? 'in pari'
+                : `differenza ~${eur(Math.abs(net) / 100)} ${net > 0 ? `a favore di ${o?.name ?? ''}` : 'a tuo favore'}`}
           </span>
           <button onClick={giveBack}>Restituisci</button>
           <button className="primary" onClick={() => setSettle(true)}>
