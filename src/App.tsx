@@ -97,17 +97,23 @@ function PodGate({ email }: { email: string }) {
 function useUpdateBanner() {
   const [release, setRelease] = useState<Release | null>(null)
   useEffect(() => {
-    latestRelease()
-      .then((r) => {
-        let hidden: string | null = null
-        try {
-          hidden = localStorage.getItem('mtg:update-hidden')
-        } catch {
-          /* storage non disponibile */
-        }
-        if (isNewer(r) && r!.tag !== hidden) setRelease(r)
-      })
-      .catch(() => {}) // offline o GitHub non raggiungibile: niente banner
+    const check = () =>
+      latestRelease()
+        .then((r) => {
+          let hidden: string | null = null
+          try {
+            hidden = localStorage.getItem('mtg:update-hidden')
+          } catch {
+            /* storage non disponibile */
+          }
+          if (isNewer(r) && r!.tag !== hidden) setRelease(r)
+        })
+        .catch(() => {}) // offline o GitHub non raggiungibile: niente banner
+    check()
+    // anche quando si torna nell'app (la cache evita più di un controllo ogni 20 minuti)
+    const onVisible = () => document.visibilityState === 'visible' && check()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
   return {
     release,

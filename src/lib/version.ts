@@ -10,7 +10,7 @@ type Cache = { at: number; release: Release | null }
 type GhRelease = { tag_name: string; html_url: string; draft?: boolean; assets?: { name: string; browser_download_url: string }[] }
 
 const KEY = `mtg:latest-release:${PREFIX}`
-const EVERY = 12 * 3600 * 1000 // GitHub senza login concede 60 richieste l'ora: basta un controllo ogni 12 ore
+const EVERY = 20 * 60 * 1000 // GitHub senza login concede 60 richieste l'ora: un controllo ogni 20 minuti al massimo
 const num = (tag?: string) => Number(tag?.match(/(\d+)$/)?.[1] ?? 0)
 
 export const isNewer = (r: Release | null) => !!r && !!APP_VERSION && r.tag.startsWith(PREFIX) && num(r.tag) > num(APP_VERSION)
