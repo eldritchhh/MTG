@@ -199,7 +199,7 @@ export function VersionCard() {
   }
   const newer = state?.release && isNewer(state.release) ? state.release : null
   return (
-    <div className="card stack">
+    <div className="card stack version-card">
       <h2 className="section">
         <Icon name="check" size={16} /> Versione
       </h2>

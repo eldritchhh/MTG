@@ -237,7 +237,7 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
 
       <div className="sticky-cta">
         <button className="primary big" disabled={sel.length < 2} onClick={start}>
-          <Icon name="play" size={18} /> Inizia partita{pod ? ` in ${pod.name}` : ''}
+          <Icon name="play" size={18} /> Inizia partita
         </button>
         {sel.length < 2 && <p className="muted small center-text no-m">Scegli almeno 2 giocatori</p>}
       </div>

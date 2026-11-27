@@ -138,6 +138,10 @@ export function AccountScreen({ email, onClose }: { email: string; onClose: () =
           { icon: 'user', target: '.account-player', title: 'Il tuo giocatore', text: 'In ogni pod sei un giocatore: serve per il tuo saldo, i tuoi mazzi e le partite. Se hai sbagliato, cambialo da qui.' },
           { icon: 'cards', target: '.account-decks', title: 'I tuoi mazzi', text: 'Li crei una volta e valgono in tutti i tuoi pod.' },
           { icon: 'edit', target: '.prefs-card', title: 'Preferenze', text: 'Vita iniziale, vibrazione, schermo acceso in partita. Da qui puoi anche rivedere questi suggerimenti.' },
+          // aggiornamenti: solo nell'app Android (sul sito per iPhone arrivano da soli)
+          ...(APP_VERSION
+            ? [{ icon: 'check', target: '.version-card', title: 'Aggiornamenti', text: 'Qui vedi la versione installata. "Controlla aggiornamenti" e poi "Aggiorna": l\'app scarica la nuova versione e apre l\'installer. Quando ne esce una, compare anche un avviso in alto.' }]
+            : []),
         ]}
       />
     </Screen>
