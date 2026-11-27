@@ -10,7 +10,7 @@ import { ChoosePlayer } from './Onboarding'
 import { CardNamesList, CommanderList, DataCard, LocalCards, VersionCard } from './Settings'
 import { APP_VERSION } from '../lib/version'
 import { Icon } from '../icons'
-import { resetTips } from '../lib/tips'
+import { resetTips, Tip } from '../lib/tips'
 import { toast } from '../lib/toast'
 
 export function AccountScreen({ email, onClose }: { email: string; onClose: () => void }) {
@@ -37,7 +37,7 @@ export function AccountScreen({ email, onClose }: { email: string; onClose: () =
 
       {isCloud && pod?.current ? (
         <div className="list">
-          <button className="list-item" onClick={() => setChoose(true)}>
+          <button className="list-item account-player" onClick={() => setChoose(true)}>
             <div className="grow">
               <div className="muted small">Il tuo giocatore in {pod.current.name}</div>
               <div className="strong">{me?.name ?? 'nessuno'}</div>
@@ -45,7 +45,7 @@ export function AccountScreen({ email, onClose }: { email: string; onClose: () =
             <span className="change-link">Cambia</span>
           </button>
           {meId && (
-            <button className="list-item" onClick={() => nav.showPlayer(meId)}>
+            <button className="list-item account-decks" onClick={() => nav.showPlayer(meId)}>
               <div className="grow strong">I tuoi mazzi</div>
               <span className="muted">{myDecks}</span>
               <Icon name="chevron" size={16} className="muted" />
@@ -69,7 +69,7 @@ export function AccountScreen({ email, onClose }: { email: string; onClose: () =
 
       {isCloud && pod && <MyStats />}
 
-      <div className="card stack">
+      <div className="card stack prefs-card">
         <h2 className="section">
           <Icon name="edit" size={16} /> Preferenze
         </h2>
@@ -131,6 +131,15 @@ export function AccountScreen({ email, onClose }: { email: string; onClose: () =
           <ChoosePlayer onDone={() => setChoose(false)} />
         </Modal>
       )}
+      <Tip
+        id="account"
+        when={isCloud && !!pod?.current}
+        steps={[
+          { icon: 'user', target: '.account-player', title: 'Il tuo giocatore', text: 'In ogni pod sei un giocatore: serve per il tuo saldo, i tuoi mazzi e le partite. Se hai sbagliato, cambialo da qui.' },
+          { icon: 'cards', target: '.account-decks', title: 'I tuoi mazzi', text: 'Li crei una volta e valgono in tutti i tuoi pod.' },
+          { icon: 'edit', target: '.prefs-card', title: 'Preferenze', text: 'Vita iniziale, vibrazione, schermo acceso in partita. Da qui puoi anche rivedere questi suggerimenti.' },
+        ]}
+      />
     </Screen>
   )
 }

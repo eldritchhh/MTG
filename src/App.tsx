@@ -19,6 +19,7 @@ import { ToastHost } from './lib/toast'
 import { Avatar, LoadingPage, PodBadge } from './components'
 import { PodSheet, PodScreen } from './pages/PodScreen'
 import { AccountScreen } from './pages/Account'
+import { Tip } from './lib/tips'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'game', label: 'Partita', icon: 'heart' },
@@ -268,6 +269,15 @@ function AppHeader() {
         </button>
       </div>
       <div className="pod-bar" />
+      {cur && (
+        <Tip
+          id="header"
+          steps={[
+            { icon: 'users', target: '.pod-pill', title: 'Il pod in cui sei', text: 'Partite, spese e statistiche sono di questo pod. Toccalo per passare a un altro pod o crearne uno nuovo.' },
+            { icon: 'user', target: '.avatar-btn', title: 'Il tuo profilo', text: 'Tocca la tua icona per account, mazzi, preferenze e statistiche su tutti i pod.' },
+          ]}
+        />
+      )}
     </header>
   )
 }

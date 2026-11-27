@@ -23,6 +23,7 @@ import { ask } from '../lib/confirm'
 import { toast } from '../lib/toast'
 import { Icon } from '../icons'
 import { onDate } from '../lib/util'
+import { Tip } from '../lib/tips'
 
 const lastGame = (iso: string | null) => {
   if (!iso) return 'nessuna partita'
@@ -74,7 +75,7 @@ export function PodSheet({ onClose }: { onClose: () => void }) {
             onCancel={() => setStart(false)}
           />
         ) : (
-          <div className="row">
+          <div className="row pod-actions">
             <button className="grow" onClick={() => setStart(true)}>
               <Icon name="plus" size={16} /> Crea pod
             </button>
@@ -83,10 +84,18 @@ export function PodSheet({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         )}
-        <button className="link center-self" onClick={nav.openPod}>
+        <button className="link center-self pod-manage" onClick={nav.openPod}>
           {cur.role === 'admin' ? 'Gestisci' : 'Dettagli di'} «{cur.name}» ›
         </button>
       </div>
+      <Tip
+        id="pods"
+        steps={[
+          { icon: 'users', target: '.modal .pod-row.selected', title: 'I tuoi pod', text: 'Ogni pod è un gruppo con i suoi giocatori, partite e spese. Tocca un pod per passarci: il colore in alto ti dice sempre in quale sei.' },
+          { icon: 'plus', target: '.modal .pod-actions', title: 'Nuovi gruppi', text: 'Crea un pod per un altro gruppo di amici, oppure entra in quello di qualcuno con il codice invito che ti manda.' },
+          { icon: 'edit', target: '.modal .pod-manage', title: cur.role === 'admin' ? 'Gestire il pod' : 'Dettagli del pod', text: cur.role === 'admin' ? 'Nome, colore, codici invito, membri e tier del pod.' : 'Chi c\'è nel pod, e da qui puoi anche uscire.' },
+        ]}
+      />
     </Modal>
   )
 }
@@ -187,7 +196,7 @@ export function PodScreen({ onClose }: { onClose: () => void }) {
       )}
 
       {admin && (
-        <div className="card stack">
+        <div className="card stack invites-card">
           <h2 className="section">
             <Icon name="plus" size={16} /> Inviti
           </h2>
@@ -217,7 +226,7 @@ export function PodScreen({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      <div className="card stack">
+      <div className="card stack members-card">
         <h2 className="section">
           <Icon name="users" size={16} /> Membri
         </h2>
@@ -278,6 +287,14 @@ export function PodScreen({ onClose }: { onClose: () => void }) {
       <button className="danger" onClick={leave}>
         Esci dal pod
       </button>
+      <Tip
+        id="pod-admin"
+        when={admin}
+        steps={[
+          { icon: 'plus', target: '.invites-card', title: 'Invitare gli amici', text: 'Crea un codice e mandalo con "Condividi": gli amici lo inseriscono dopo essersi registrati.' },
+          { icon: 'users', target: '.members-card', title: 'Membri', text: 'Collega ogni account al suo giocatore e decidi chi è admin. Gli admin possono modificare tutto il pod; gli altri solo le cose che li riguardano.' },
+        ]}
+      />
     </Screen>
   )
 }
