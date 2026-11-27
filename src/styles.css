@@ -578,3 +578,9 @@ button.card-link { cursor: pointer; }
 @keyframes tip-pulse { from { box-shadow: 0 0 0 3px #d9b45a22, 0 0 14px #d9b45a55; } to { box-shadow: 0 0 0 7px #d9b45a44, 0 0 30px #d9b45aaa; } }
 @media (prefers-reduced-motion: reduce) { .tip-ring { animation: none; transition: none; } }
 .tip-bg.mid { align-items: center; }
+/* nuova partita: righe dei giocatori tutte alte uguali (nome del mazzo su una riga, con i puntini) */
+.seat-setup { height: 84px; }
+.seat-setup-text { min-width: 0; }
+.one-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.one-line .deckchip { display: inline; }
+.one-line .deckchip .pips { vertical-align: middle; margin-right: 4px; }

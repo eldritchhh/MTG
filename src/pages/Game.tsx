@@ -198,10 +198,12 @@ function Setup({ onStart }: { onStart: (l: Live) => void }) {
                   <DeckArt d={D[deckOf[id]]} className="thumb" />
                   <TierBadge id={D[deckOf[id]]?.tier_id} small />
                 </div>
-                <div className="grow stack-sm">
-                  <div className="strong">{P[id]?.name}</div>
-                  <div className="small clamp2">{D[deckOf[id]] ? <DeckChip d={D[deckOf[id]]} /> : <span className="muted">Scegli il mazzo</span>}</div>
-                  {D[deckOf[id]] && D[deckOf[id]].player_id !== id && <div className="muted small">mazzo di {P[D[deckOf[id]].player_id]?.name}</div>}
+                <div className="grow stack-sm seat-setup-text">
+                  <div className="one-line">
+                    <b>{P[id]?.name}</b>
+                    {D[deckOf[id]] && D[deckOf[id]].player_id !== id && <span className="muted small"> · mazzo di {P[D[deckOf[id]].player_id]?.name}</span>}
+                  </div>
+                  <div className="small one-line">{D[deckOf[id]] ? <DeckChip d={D[deckOf[id]]} /> : <span className="muted">Scegli il mazzo</span>}</div>
                 </div>
                 <span className="change-link">Cambia</span>
               </button>
