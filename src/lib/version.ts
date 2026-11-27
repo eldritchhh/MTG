@@ -26,7 +26,7 @@ export async function latestRelease(force = false): Promise<Release | null> {
   }
   if (!force && cache && Date.now() - cache.at < EVERY) return cache.release
   // "releases/latest" esclude le pre-release: le prendo tutte e scelgo il numero più alto del mio canale
-  const r = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: 'application/vnd.github+json' } })
+  const r = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=10`, { headers: { Accept: 'application/vnd.github+json' } })
   if (!r.ok) throw new Error(`GitHub ha risposto ${r.status}`)
   const all: GhRelease[] = await r.json()
   const best = all.filter((x) => !x.draft && x.tag_name.startsWith(PREFIX)).sort((a, b) => num(b.tag_name) - num(a.tag_name))[0]

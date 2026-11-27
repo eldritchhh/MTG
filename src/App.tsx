@@ -98,7 +98,7 @@ function useUpdateBanner() {
   const [release, setRelease] = useState<Release | null>(null)
   useEffect(() => {
     const check = () =>
-      latestRelease()
+      latestRelease(true)
         .then((r) => {
           let hidden: string | null = null
           try {
@@ -109,7 +109,7 @@ function useUpdateBanner() {
           if (isNewer(r) && r!.tag !== hidden) setRelease(r)
         })
         .catch(() => {}) // offline o GitHub non raggiungibile: niente banner
-    // solo all'apertura dell'app (la cache evita più di un controllo ogni 20 minuti)
+    // a ogni apertura dell'app (una richiesta piccola a GitHub; non in background)
     check()
   }, [])
   return {
