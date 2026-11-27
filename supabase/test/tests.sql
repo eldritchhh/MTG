@@ -84,4 +84,37 @@ select pg_temp.runs(:'A', $q$select apply_ops('[
 ]'::jsonb)$q$);
 select pg_temp.check((select jsonb_array_length(participants) = 1 from games where id = '50000000-0000-0000-0000-000000000002'), 'jsonb e date passano intatti');
 
+-- ---------- registrazione solo con codice invito (signup.sql) ----------
+insert into pod_invites (code, pod_id, uses_left) values ('ABC234', :'P1', 1), ('OLD999', :'P1', 5);
+update pod_invites set expires_at = now() - interval '1 day' where code = 'OLD999';
+do $$
+declare failed boolean;
+begin
+  failed := false;
+  begin insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000d0', 'senza@x');
+  exception when others then failed := true; end;
+  perform pg_temp.check(failed, 'senza codice invito non ci si registra');
+  failed := false;
+  begin insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-0000000000d0', 'sbagliato@x', '{"invite":"NOPE00"}');
+  exception when others then failed := true; end;
+  perform pg_temp.check(failed, 'con un codice inventato non ci si registra');
+  failed := false;
+  begin insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-0000000000d0', 'scaduto@x', '{"invite":"OLD999"}');
+  exception when others then failed := true; end;
+  perform pg_temp.check(failed, 'con un codice scaduto non ci si registra');
+end $$;
+select pg_temp.check(public.invite_pod_name(' abc234 ') = 'P1', 'il codice si controlla prima (minuscole e spazi vanno bene)');
+select pg_temp.check(public.invite_pod_name('OLD999') is null, '…e un codice scaduto non vale');
+insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-0000000000d1', 'nuovo@x', '{"invite":"abc234"}');
+select pg_temp.check((select role = 'user' and player_id is null from pod_members where user_id = '00000000-0000-0000-0000-0000000000d1' and pod_id = :'P1'), 'con il codice si entra subito nel gruppo (poi "chi sei")');
+select pg_temp.check((select uses_left = 0 from pod_invites where code = 'ABC234'), 'il codice perde un uso');
+do $$
+declare failed boolean := false;
+begin
+  begin insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-0000000000d2', 'tardi@x', '{"invite":"ABC234"}');
+  exception when others then failed := true; end;
+  perform pg_temp.check(failed and not exists (select 1 from auth.users where id = '00000000-0000-0000-0000-0000000000d2'), 'codice esaurito: nessun account creato');
+end $$;
+select pg_temp.check(has_function_privilege('anon', 'public.invite_pod_name(text)', 'execute') and not has_function_privilege('anon', 'public.signup_with_invite()', 'execute'), 'da fuori si può solo controllare il codice');
+
 select 'TUTTI I CONTROLLI SUPERATI' as esito;

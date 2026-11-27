@@ -26,7 +26,9 @@ non è vuoto e il push viene rifiutato, scrivimi prima di forzare qualcosa.
    [`supabase/schema.sql`](supabase/schema.sql) → **Run**. Deve dire *Success*. Poi, una alla volta e in quest'ordine,
    [`supabase/pods.sql`](supabase/pods.sql) (gruppi e permessi), [`supabase/cards.sql`](supabase/cards.sql) (conto carte, saldi e prezzi)
    [`supabase/decks.sql`](supabase/decks.sql) (mazzi personali, validi in tutti i tuoi gruppi)
-   e [`supabase/ops.sql`](supabase/ops.sql) (salvataggi "tutto o niente" per spese e saldi).
+   , [`supabase/ops.sql`](supabase/ops.sql) (salvataggi "tutto o niente" per spese e saldi)
+   e [`supabase/signup.sql`](supabase/signup.sql) (ci si registra solo con un codice invito: lancialo dopo aver
+   creato il tuo account e il tuo gruppo, altrimenti il primo account non si può creare).
 4. **Authentication → Sign In / Providers → Email**: disattiva **Confirm email** (così vi registrate
    dall'app senza dover cliccare link nella mail) e salva.
 5. **Project Settings → API** (o *Data API*): copia

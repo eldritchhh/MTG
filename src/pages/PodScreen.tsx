@@ -128,7 +128,7 @@ export function PodScreen({ onClose }: { onClose: () => void }) {
   }
 
   async function share(code: string) {
-    const text = `Entra nel pod "${cur.name}" su MTGUtils con il codice ${code}`
+    const text = `Entra nel pod "${cur.name}" su MTGUtils: registrati con il codice invito ${code}`
     try {
       if (navigator.share) await navigator.share({ text })
       else {
@@ -191,7 +191,7 @@ export function PodScreen({ onClose }: { onClose: () => void }) {
           <h2 className="section">
             <Icon name="plus" size={16} /> Inviti
           </h2>
-          <p className="muted small no-m">Manda il codice agli amici: lo inseriscono dopo la registrazione. Vale 14 giorni e fino a 20 persone.</p>
+          <p className="muted small no-m">Manda il codice agli amici: chi è nuovo lo inserisce quando si registra (senza codice non ci si registra), chi ha già un account usa "Entra con codice". Vale 14 giorni e fino a 20 persone.</p>
           {invites.map((i) => (
             <div key={i.code} className="row between line">
               <span>
