@@ -109,11 +109,8 @@ function useUpdateBanner() {
           if (isNewer(r) && r!.tag !== hidden) setRelease(r)
         })
         .catch(() => {}) // offline o GitHub non raggiungibile: niente banner
+    // solo all'apertura dell'app (la cache evita più di un controllo ogni 20 minuti)
     check()
-    // anche quando si torna nell'app (la cache evita più di un controllo ogni 20 minuti)
-    const onVisible = () => document.visibilityState === 'visible' && check()
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
   return {
     release,
