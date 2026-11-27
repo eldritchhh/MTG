@@ -569,3 +569,12 @@ button.card-link { cursor: pointer; }
 .tip-dots i { width: 6px; height: 6px; border-radius: 50%; background: #ffffff33; }
 .tip-dots i.on { background: var(--gold); }
 @media (prefers-reduced-motion: reduce) { .tip, .tip-bg { animation: none; } }
+/* suggerimenti: ciò che descrivono resta illuminato */
+.tip-bg.spot { background: none; }
+.tip-bg.top { align-items: flex-start; padding-top: calc(16px + env(safe-area-inset-top)); }
+.tip-mask { position: fixed; inset: 0; pointer-events: none; }
+.tip-ring { position: fixed; border: 2px solid var(--gold); border-radius: 14px; box-shadow: 0 0 0 4px #d9b45a33, 0 0 24px #d9b45a88; pointer-events: none; animation: tip-pulse 1.2s ease-in-out infinite alternate; transition: left 0.25s, top 0.25s, width 0.25s, height 0.25s; }
+.tip-bg .tip { position: relative; z-index: 1; }
+@keyframes tip-pulse { from { box-shadow: 0 0 0 3px #d9b45a22, 0 0 14px #d9b45a55; } to { box-shadow: 0 0 0 7px #d9b45a44, 0 0 30px #d9b45aaa; } }
+@media (prefers-reduced-motion: reduce) { .tip-ring { animation: none; transition: none; } }
+.tip-bg.mid { align-items: center; }

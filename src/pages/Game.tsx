@@ -504,10 +504,10 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
       <Tip
         id="board"
         steps={[
-          { icon: 'heart', title: 'Punti vita', text: 'Tocca la metà destra di un giocatore per +1, la sinistra per −1. I bottoni ±5 sono in basso.' },
-          { icon: 'swap', title: 'Cambiare posto', text: 'Tieni premuto un giocatore e trascinalo sul nuovo posto (oppure rilascia e tocca il posto).' },
-          { icon: 'sword', title: 'Danni da comandante', text: 'Tocca la spada sotto chi riceve i danni: gli altri posti diventano contatori. Tocca "Fatto" per tornare.' },
-          { icon: 'dice', title: 'Strumenti', text: 'Il dado in alto: chi inizia, turni, dadi e moneta, Monarca, Iniziativa. Il bottone accanto alla spada: veleno e altri segnalini.' },
+          { icon: 'heart', target: '[data-seat="0"]', title: 'Punti vita', text: 'Tocca la metà destra di un giocatore per +1, la sinistra per −1. I bottoni ±5 sono in basso.' },
+          { icon: 'swap', target: '[data-seat="0"]', title: 'Cambiare posto', text: 'Tieni premuto un giocatore e trascinalo sul nuovo posto (oppure rilascia e tocca il posto).' },
+          { icon: 'sword', target: '[data-seat="0"] .mini-pair .mini:first-child', title: 'Danni da comandante', text: 'Tocca la spada sotto chi riceve i danni: gli altri posti diventano contatori. Tocca "Fatto" per tornare.' },
+          { icon: 'dice', target: '.board-top .icon-btn:first-child, [data-seat="0"] .mini-pair .mini:last-child', title: 'Strumenti', text: 'Il dado in alto: chi inizia, turni, dadi e moneta, Monarca, Iniziativa. Il bottone accanto alla spada: veleno e altri segnalini.' },
         ]}
       />
     </div>

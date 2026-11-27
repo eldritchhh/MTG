@@ -46,7 +46,38 @@ export function resetTips() {
   }
 }
 
-export type TipStep = { icon?: string; title: string; text: ReactNode }
+// target: selettore CSS di ciò che il passo descrive (anche più elementi, separati da virgola): resta illuminato
+export type TipStep = { icon?: string; title: string; text: ReactNode; target?: string }
+
+type Box = { x: number; y: number; w: number; h: number }
+const PAD = 6
+
+// posizione degli elementi da illuminare, aggiornata a ogni fotogramma (rotazioni, scroll, tastiera…)
+function useBoxes(selector: string | undefined, active: boolean) {
+  const [boxes, setBoxes] = useState<Box[]>([])
+  useEffect(() => {
+    if (!active || !selector) return setBoxes([])
+    const els = () => [...document.querySelectorAll<HTMLElement>(selector)].slice(0, 4)
+    els()[0]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    let raf = 0
+    let last = ''
+    const tick = () => {
+      const next = els()
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0)
+        .map((r) => ({ x: r.left - PAD, y: r.top - PAD, w: r.width + PAD * 2, h: r.height + PAD * 2 }))
+      const key = JSON.stringify(next)
+      if (key !== last) {
+        last = key
+        setBoxes(next)
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    tick()
+    return () => cancelAnimationFrame(raf)
+  }, [selector, active])
+  return boxes
+}
 
 // when: mostra solo se la schermata è pronta (es. dati caricati, solo nei gruppi)
 export function Tip({ id, steps, when = true }: { id: string; steps: TipStep[]; when?: boolean }) {
@@ -62,11 +93,36 @@ export function Tip({ id, steps, when = true }: { id: string; steps: TipStep[]; 
     setOpen(false)
   }
   useBack(open && close)
+  const step = steps[Math.min(i, steps.length - 1)]
+  const boxes = useBoxes(step?.target, open)
   if (!open) return null
-  const step = steps[i]
   const last = i === steps.length - 1
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  // il fumetto va dove non copre ciò che descrive: in basso, in alto, o al centro se è sia in alto sia in basso
+  const low = boxes.some((b) => b.y + b.h > vh * 0.55)
+  const high = boxes.some((b) => b.y < vh * 0.35)
+  const where = low && high ? 'mid' : low ? 'top' : ''
   return createPortal(
-    <div className="tip-bg" onClick={close}>
+    <div className={`tip-bg ${where} ${boxes.length ? 'spot' : ''}`} onClick={close}>
+      {boxes.length > 0 && (
+        <>
+          <svg className="tip-mask" width={vw} height={vh} aria-hidden>
+            <defs>
+              <mask id="tip-holes">
+                <rect width={vw} height={vh} fill="white" />
+                {boxes.map((b, k) => (
+                  <rect key={k} x={b.x} y={b.y} width={b.w} height={b.h} rx={14} fill="black" />
+                ))}
+              </mask>
+            </defs>
+            <rect width={vw} height={vh} fill="#000000b8" mask="url(#tip-holes)" />
+          </svg>
+          {boxes.map((b, k) => (
+            <span key={k} className="tip-ring" style={{ left: b.x, top: b.y, width: b.w, height: b.h }} />
+          ))}
+        </>
+      )}
       <div className="tip" role="dialog" aria-modal="true" aria-label={step.title} onClick={(e) => e.stopPropagation()}>
         <div className="row tip-head">
           {step.icon && (

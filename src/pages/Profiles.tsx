@@ -501,7 +501,7 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
             </div>
           </div>
         </fieldset>
-        <div className="field">
+        <div className="field tier-field">
           <span>Tier</span>
           <TierPicker tiers={tiers} value={tierId} onChange={setTierId} />
         </div>
@@ -570,7 +570,7 @@ function DeckForm({ deck, playerId, allTags, onClose }: { deck: Deck | null; pla
         <Tip
           id="deck"
           when={!!pod}
-          steps={[{ icon: 'cards', title: 'I tuoi mazzi valgono ovunque', text: 'Un mazzo lo crei una volta e compare in tutti i gruppi in cui giochi. Il tier invece vale solo nel gruppo aperto, e puoi nascondere un mazzo in un gruppo.' }]}
+          steps={[{ icon: 'cards', target: '.modal .tier-field', title: 'I tuoi mazzi valgono ovunque', text: 'Un mazzo lo crei una volta e compare in tutti i gruppi in cui giochi. Il tier invece vale solo nel gruppo aperto, e puoi nascondere un mazzo in un gruppo.' }]}
         />
       </div>
     </Modal>

@@ -38,8 +38,8 @@ export default function TradesPage() {
       <Tip
         id="trades"
         steps={[
-          { icon: 'coin', title: 'Soldi', text: 'Le spese: chi ha pagato, quanto e tra chi si divide. "Come pareggiare" dice chi deve dare cosa a chi, con il minimo di passaggi.' },
-          { icon: 'cards', title: 'Carte', text: 'Le carte prestate restano nel conto tra due persone e non sono debiti: quando vuoi le restituisci o le saldi (tieni la carta, ne dai un\'altra o paghi).' },
+          { icon: 'coin', target: 'main .segmented:first-of-type button:nth-child(1)', title: 'Soldi', text: 'Le spese: chi ha pagato, quanto e tra chi si divide. "Come pareggiare" dice chi deve dare cosa a chi, con il minimo di passaggi.' },
+          { icon: 'cards', target: 'main .segmented:first-of-type button:nth-child(2)', title: 'Carte', text: 'Le carte prestate restano nel conto tra due persone e non sono debiti: quando vuoi le restituisci o le saldi (tieni la carta, ne dai un\'altra o paghi).' },
         ]}
       />
     </div>
