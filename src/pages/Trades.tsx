@@ -5,6 +5,7 @@ import type { Debt, Player } from '../lib/types'
 import { byId, dayIt, eur, netBalances, parseEur, playerName, settlements } from '../lib/util'
 import { Avatar, Empty, Header, Modal, Segmented, Switch } from '../components'
 import { Icon } from '../icons'
+import { Tip } from '../lib/tips'
 import { groupTotal, payerIncluded, splitEqual } from '../lib/money'
 import { useInPod, usePerms } from '../lib/pod'
 import { useNav } from '../lib/nav'
@@ -34,6 +35,13 @@ export default function TradesPage() {
         ]}
       />
       {sub === 'money' ? <Money /> : <CardsTab />}
+      <Tip
+        id="trades"
+        steps={[
+          { icon: 'coin', title: 'Soldi', text: 'Le spese: chi ha pagato, quanto e tra chi si divide. "Come pareggiare" dice chi deve dare cosa a chi, con il minimo di passaggi.' },
+          { icon: 'cards', title: 'Carte', text: 'Le carte prestate restano nel conto tra due persone e non sono debiti: quando vuoi le restituisci o le saldi (tieni la carta, ne dai un\'altra o paghi).' },
+        ]}
+      />
     </div>
   )
 }

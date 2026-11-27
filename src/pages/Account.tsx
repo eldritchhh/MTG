@@ -10,6 +10,8 @@ import { ChoosePlayer } from './Onboarding'
 import { CardNamesList, CommanderList, DataCard, LocalCards, VersionCard } from './Settings'
 import { APP_VERSION } from '../lib/version'
 import { Icon } from '../icons'
+import { resetTips } from '../lib/tips'
+import { toast } from '../lib/toast'
 
 export function AccountScreen({ email, onClose }: { email: string; onClose: () => void }) {
   const pod = usePod()
@@ -100,6 +102,15 @@ export function AccountScreen({ email, onClose }: { email: string; onClose: () =
         >
           Schermo sempre acceso durante la partita
         </Switch>
+        <button
+          className="small-btn"
+          onClick={() => {
+            resetTips()
+            toast('I suggerimenti ricompariranno nelle schermate')
+          }}
+        >
+          Rivedi i suggerimenti
+        </button>
       </div>
 
       <h3 className="no-m">App e dati</h3>

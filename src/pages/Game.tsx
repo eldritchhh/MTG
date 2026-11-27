@@ -11,6 +11,7 @@ import { useNav } from '../lib/nav'
 import { buzz, prefs } from '../lib/prefs'
 import { useKeepAwake } from '../lib/keepAwake'
 import { toast } from '../lib/toast'
+import { Tip } from '../lib/tips'
 import { changeSeat, commanderDamage, isDead, nextTurn, swapSeats, type Layout, type Live, type Seat } from '../lib/game'
 
 const LAYOUTS: { id: Layout; label: string }[] = [
@@ -500,6 +501,15 @@ function Board({ live, setLive }: { live: Live; setLive: (l: Live | null) => voi
       )}
 
       {ending && <EndGame live={live} P={P} D={D} onClose={() => setEnding(false)} onSaved={() => setLive(null)} />}
+      <Tip
+        id="board"
+        steps={[
+          { icon: 'heart', title: 'Punti vita', text: 'Tocca la metà destra di un giocatore per +1, la sinistra per −1. I bottoni ±5 sono in basso.' },
+          { icon: 'swap', title: 'Cambiare posto', text: 'Tieni premuto un giocatore e trascinalo sul nuovo posto (oppure rilascia e tocca il posto).' },
+          { icon: 'sword', title: 'Danni da comandante', text: 'Tocca la spada sotto chi riceve i danni: gli altri posti diventano contatori. Tocca "Fatto" per tornare.' },
+          { icon: 'dice', title: 'Strumenti', text: 'Il dado in alto: chi inizia, turni, dadi e moneta, Monarca, Iniziativa. Il bottone accanto alla spada: veleno e altri segnalini.' },
+        ]}
+      />
     </div>
   )
 }
