@@ -1,5 +1,7 @@
 name: Deploy su GitHub Pages
 
+# Versione web dell'app (per iPhone: Safari → Condividi → Aggiungi a Home) a ogni push su main.
+# Parte da sola quando GitHub Pages è attivo (Settings → Pages → Source: GitHub Actions); altrimenti si salta.
 on:
   push:
     branches: [main]
@@ -15,11 +17,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    # parte solo se hai attivato Pages e creato la variabile ENABLE_PAGES = true (vedi GUIDA.md)
-    if: vars.ENABLE_PAGES == 'true' || github.event_name == 'workflow_dispatch'
+  check:
     runs-on: ubuntu-latest
-    environment: env
+    outputs:
+      enabled: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/${{ github.repository }}/pages")
+          if [ "$code" = 200 ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::GitHub Pages non è attivo (Settings → Pages → Source: GitHub Actions): niente sito"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    # stesso database dell'APK (environment test-env, vedi apk.yml)
+    environment: test-env
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,9 +49,12 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          # numero della versione web nel service worker (svuota la cache vecchia a ogni pubblicazione)
+          VITE_WEB_BUILD: ${{ github.run_number }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+
   deploy:
     needs: build
     runs-on: ubuntu-latest

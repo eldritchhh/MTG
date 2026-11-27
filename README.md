@@ -44,9 +44,9 @@ Le tabelle sono leggibili/scrivibili solo dagli utenti loggati con email in list
 ## 3. Pubblicala online gratis (GitHub Pages)
 
 1. Su GitHub: **Settings → Pages → Source: GitHub Actions**.
-2. **Settings → Secrets and variables → Actions → Variables**: aggiungi
-   `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (la chiave anon è pubblica per design: la protezione la fa il login + RLS).
-3. Fai push su `main` (o lancia a mano il workflow *Deploy su GitHub Pages*).
+2. **Settings → Environments → test-env → Variables**: `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`
+   (le stesse dell'APK; la chiave anon è pubblica per design: la protezione la fa il login + RLS).
+3. Fai push su `main` (o lancia a mano il workflow *Deploy su GitHub Pages*): con Pages attivo il sito si aggiorna da solo.
 4. Apri `https://<utente>.github.io/<repo>/` dal telefono → *Condividi → Aggiungi alla schermata Home*.
 
 ## Struttura

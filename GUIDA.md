@@ -101,8 +101,9 @@ Non metterli nel repository. Dopo aver aggiunto la chiave, disinstalla una volta
 
 ## Alternative senza APK
 
-- **iPhone o chi non vuole l'APK**: attiva GitHub Pages (Settings → Pages → Source: *GitHub Actions*,
-  su un repo privato serve un piano GitHub a pagamento), aggiungi la variabile `ENABLE_PAGES` = `true`
-  accanto alle altre due e lancia **Actions → Deploy su GitHub Pages → Run workflow**. Poi apri l'indirizzo
-  `https://eldritchhh.github.io/MTG/` e scegli *Aggiungi a schermata Home*. Usa lo stesso database.
+- **iPhone o chi non vuole l'APK**: attiva GitHub Pages una volta (Settings → Pages → Source: *GitHub Actions*;
+  su un repo privato serve un piano GitHub a pagamento). Da lì il sito si aggiorna a ogni push su `main`
+  (o a mano: **Actions → Deploy su GitHub Pages → Run workflow**). Su iPhone apri in **Safari**
+  `https://eldritchhh.github.io/MTG/` → **Condividi → Aggiungi alla schermata Home**: si apre a schermo intero,
+  anche senza rete, e usa lo stesso database dell'APK (environment `test-env`). Gli aggiornamenti arrivano da soli.
 - **Provarla sul PC**: `npm install`, copia `.env.example` in `.env.local` con URL e chiave, poi `npm run dev`.

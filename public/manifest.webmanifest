@@ -3,7 +3,25 @@
   "short_name": "MTGUtils",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#14121c",
-  "theme_color": "#14121c",
-  "icons": [{ "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }]
+  "background_color": "#0e0c14",
+  "theme_color": "#0e0c14",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "id": "./",
+  "scope": "./",
+  "description": "Contatore vita, spese e carte per il gruppo di Magic",
+  "lang": "it",
+  "orientation": "portrait"
 }
